@@ -2,74 +2,43 @@
 Imports Unicode = System.Text.UnicodeEncoding
 
 Module SunnysBigAdventure
-    Public Class BiDictionary(Of T1, T2)
-        Implements IEnumerable(Of KeyValuePair(Of T1, T2))
-        ReadOnly to1 As New Dictionary(Of T2, T1)()
-        ReadOnly to2 As New Dictionary(Of T1, T2)()
-        Public Sub Add(t1 As T1, t2 As T2)
-            to1.Add(t2, t1)
-            to2.Add(t1, t2)
-        End Sub
-        Public Sub Remove(t1 As T1)
-            Dim t2 As T2
-            If to2.Remove(t1, t2) Then
-                to1.Remove(t2)
-            Else
-                Throw New KeyNotFoundException()
-            End If
-        End Sub
-        Public Sub Remove(t2 As T2)
-            Dim t1 As T1
-            If to1.Remove(t2, t1) Then
-                to2.Remove(t1)
-            Else
-                Throw New KeyNotFoundException()
-            End If
-        End Sub
-        Public Sub Clear()
-            to1.Clear()
-            to2.Clear()
-        End Sub
-        Default Public Property [Get](t2 As T2)
-            Get
-                Return to1(t2)
-            End Get
-            Set(value)
-                to1(t2) = value
-            End Set
-        End Property
-        Default Public Property [Get](t1 As T1)
-            Get
-                Return to2(t1)
-            End Get
-            Set(value)
-                to2(t1) = value
-            End Set
-        End Property
-        Public Function GetEnumerator() As IEnumerator(Of KeyValuePair(Of T1, T2)) Implements IEnumerable(Of KeyValuePair(Of T1, T2)).GetEnumerator
-            Return to2.GetEnumerator()
-        End Function
-        Private Function IEnumerable_GetEnumerator() As IEnumerator Implements IEnumerable.GetEnumerator
-            Return to2.GetEnumerator()
-        End Function
-    End Class
     Structure Point
-        Public Sub New(x As Integer, y As Integer)
-            Me.X = x
-            Me.Y = y
+        Public Sub New(left As Integer, top As Integer)
+            Me.Left = left
+            Me.Top = top
         End Sub
-        Public ReadOnly Property X As Integer
-        Public ReadOnly Property Y As Integer
+        Public ReadOnly Property Left As Integer
+        Public ReadOnly Property Top As Integer
         Public Overrides Function ToString() As String
-            Return $"({X}, {Y})"
+            Return $"({Left}, {Top})"
         End Function
+        Public ReadOnly Property ToUp As Point
+            Get
+                Return New Point(Left, Math.Max(Top - 1, 0))
+            End Get
+        End Property
+        Public ReadOnly Property ToDown As Point
+            Get
+                Return New Point(Left, Math.Min(BufferHeight, Top + 1))
+            End Get
+        End Property
+        Public ReadOnly Property ToLeft As Point
+            Get
+                Return New Point(Math.Max(Left - 1, 0), Top)
+            End Get
+        End Property
+        Public ReadOnly Property ToRight As Point
+            Get
+                Return New Point(Math.Min(Left + 1, BufferWidth), Top)
+            End Get
+        End Property
     End Structure
     Structure Rectangle
         Public Sub New(top As Integer, left As Integer, width As Integer, height As Integer)
             Me.New(New Point(top, left), width, height)
         End Sub
         Public Sub New(topLeft As Point, bottomRight As Point)
-            Me.New(topLeft, bottomRight.X - topLeft.X + 1, bottomRight.Y - topLeft.Y + 1)
+            Me.New(topLeft, bottomRight.Left - topLeft.Left + 1, bottomRight.Top - topLeft.Top + 1)
         End Sub
         Public Sub New(topLeft As Point, width As Integer, height As Integer)
             Me.TopLeft = topLeft
@@ -81,24 +50,27 @@ Module SunnysBigAdventure
         Public ReadOnly Property Height As Integer
         Public ReadOnly Property Left As Integer
             Get
-                Return TopLeft.X
+                Return TopLeft.Left
             End Get
         End Property
         Public ReadOnly Property Right As Integer
             Get
-                Return TopLeft.X + Width - 1
+                Return TopLeft.Left + Width - 1
             End Get
         End Property
         Public ReadOnly Property Top As Integer
             Get
-                Return TopLeft.Y
+                Return TopLeft.Top
             End Get
         End Property
         Public ReadOnly Property Bottom As Integer
             Get
-                Return TopLeft.Y + Height - 1
+                Return TopLeft.Top + Height - 1
             End Get
         End Property
+        Function Contains(point As Point) As Boolean
+            Return Left <= point.Left And point.Left <= Right And Top <= point.Top And point.Top <= Bottom
+        End Function
         Public Overrides Function ToString() As String
             Return $"({Left}, {Top}) to ({Right}, {Bottom})"
         End Function
@@ -115,17 +87,58 @@ Module SunnysBigAdventure
         Public Sub New(sprite As Sprite)
             Me.Sprite = sprite
         End Sub
+        Dim _position As Point?
+        Dim _sprite As Sprite
         Public Property Sprite As Sprite
+            Get
+                Return _sprite
+            End Get
+            Set(value As Sprite)
+                _sprite = value
+                Dirty = True
+            End Set
+        End Property
+        Public Property Position As Point?
+            Get
+                Return _position
+            End Get
+            Set(value As Point?)
+                If value Is Nothing Then
+                    _position = value
+                    Dirty = True
+                    Return
+                End If
+                For Each entity In Entities
+                    If entity.Position.GetValueOrDefault().Equals(value) Then Return
+                Next
+                For Each rect In Solids
+                    If rect.Contains(value) Then Return
+                Next
+                _position = value
+                Dirty = True
+            End Set
+        End Property
     End Class
     Property CursorPosition As Point
         Get
             Return New Point(CursorLeft, CursorTop)
         End Get
         Set(value As Point)
-            SetCursorPosition(value.X, value.Y)
+            SetCursorPosition(value.Left, value.Top)
         End Set
     End Property
+    Function ReadKey(timeout As TimeSpan) As ConsoleKey?
+        If KeyAvailable Then Return Console.ReadKey(True).Key
+        Dim beginWait = Date.Now
+        While Not KeyAvailable And Date.Now.Subtract(beginWait) < timeout
+            Threading.Thread.Sleep(100)
+            If KeyAvailable Then Return Console.ReadKey(True).Key
+        End While
+        Return Nothing
+    End Function
     Sub Redraw()
+        If Not Dirty Then Return
+        Dirty = False
         ResetColor()
         Console.Clear()
         For Each rect In Solids
@@ -148,10 +161,12 @@ Module SunnysBigAdventure
             Next
             Write("┛"c)
         Next
-        For Each sprite In Entities
-            CursorPosition = sprite.Key
-            ForegroundColor = sprite.Value.Sprite.Color
-            Write(sprite.Value.Sprite.Display)
+        For Each entity In Entities
+            If entity.Position.HasValue Then
+                CursorPosition = entity.Position.GetValueOrDefault()
+                ForegroundColor = entity.Sprite.Color
+                Write(entity.Sprite.Display)
+            End If
         Next
     End Sub
     Sub Clear()
@@ -185,32 +200,37 @@ Module SunnysBigAdventure
     ReadOnly Horsey_Dead As New Sprite("♞", ConsoleColor.DarkMagenta)
     ReadOnly Horsey As New Entity(Horsey_)
 
-    ReadOnly Entities As New BiDictionary(Of Point, Entity)
+    ReadOnly Entities As New List(Of Entity) From {Sun, Horsey, Sunny}
     ReadOnly Text As New Dictionary(Of Point, String)
     ReadOnly Solids As New List(Of Rectangle)
+    Dim Dirty As Boolean
 
     Sub Main()
         OutputEncoding = New Unicode()
         WindowWidth = 40
         WindowHeight = 20
+        Solids.Add(New Rectangle(0, 0, 2, 2))
+        Sunny.Position = New Point(3, 3)
+        Sun.Position = New Point(3, 6)
         While True
-            Solids.Add(New Rectangle(0, 0, 2, 2))
-            Entities.Add(New Point(3, 3), Sunny)
-            Entities.Add(New Point(3, 6), Sun)
             Redraw()
-            Dim beginWait = Date.Now
-            While Not KeyAvailable And Date.Now.Subtract(beginWait).TotalSeconds < 5
-                Threading.Thread.Sleep(250)
-                If KeyAvailable Then
-                    Select Case ReadKey(True).Key
-                        Case ConsoleKey.LeftArrow
-
-                        Case ConsoleKey.RightArrow
-                        Case ConsoleKey.UpArrow
-                        Case ConsoleKey.DownArrow
-                    End Select
-                End If
-            End While
+            Dim key = ReadKey(TimeSpan.FromSeconds(1))
+            Select Case key
+                Case ConsoleKey.LeftArrow
+                    If Sunny.Position.HasValue Then Sunny.Position = Sunny.Position.GetValueOrDefault().ToLeft
+                    Debug.WriteLine(ConsoleKey.LeftArrow)
+                Case ConsoleKey.RightArrow
+                    If Sunny.Position.HasValue Then Sunny.Position = Sunny.Position.GetValueOrDefault().ToRight
+                    Debug.WriteLine(ConsoleKey.RightArrow)
+                Case ConsoleKey.UpArrow
+                    If Sunny.Position.HasValue Then Sunny.Position = Sunny.Position.GetValueOrDefault().ToUp
+                    Debug.WriteLine(ConsoleKey.UpArrow)
+                Case ConsoleKey.DownArrow
+                    If Sunny.Position.HasValue Then Sunny.Position = Sunny.Position.GetValueOrDefault().ToDown
+                    Debug.WriteLine(ConsoleKey.DownArrow)
+                Case Else
+                    Debug.WriteLine(key)
+            End Select
         End While
     End Sub
 End Module
