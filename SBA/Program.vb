@@ -1,7 +1,58 @@
 ﻿Imports System.Console
-Imports System.ConsoleColor
+Imports Unicode = System.Text.UnicodeEncoding
 
 Module SunnysBigAdventure
+    Public Class BiDictionary(Of T1, T2)
+        Implements IEnumerable(Of KeyValuePair(Of T1, T2))
+        ReadOnly to1 As New Dictionary(Of T2, T1)()
+        ReadOnly to2 As New Dictionary(Of T1, T2)()
+        Public Sub Add(t1 As T1, t2 As T2)
+            to1.Add(t2, t1)
+            to2.Add(t1, t2)
+        End Sub
+        Public Sub Remove(t1 As T1)
+            Dim t2 As T2
+            If to2.Remove(t1, t2) Then
+                to1.Remove(t2)
+            Else
+                Throw New KeyNotFoundException()
+            End If
+        End Sub
+        Public Sub Remove(t2 As T2)
+            Dim t1 As T1
+            If to1.Remove(t2, t1) Then
+                to2.Remove(t1)
+            Else
+                Throw New KeyNotFoundException()
+            End If
+        End Sub
+        Public Sub Clear()
+            to1.Clear()
+            to2.Clear()
+        End Sub
+        Default Public Property [Get](t2 As T2)
+            Get
+                Return to1(t2)
+            End Get
+            Set(value)
+                to1(t2) = value
+            End Set
+        End Property
+        Default Public Property [Get](t1 As T1)
+            Get
+                Return to2(t1)
+            End Get
+            Set(value)
+                to2(t1) = value
+            End Set
+        End Property
+        Public Function GetEnumerator() As IEnumerator(Of KeyValuePair(Of T1, T2)) Implements IEnumerable(Of KeyValuePair(Of T1, T2)).GetEnumerator
+            Return to2.GetEnumerator()
+        End Function
+        Private Function IEnumerable_GetEnumerator() As IEnumerator Implements IEnumerable.GetEnumerator
+            Return to2.GetEnumerator()
+        End Function
+    End Class
     Structure Point
         Public Sub New(x As Integer, y As Integer)
             Me.X = x
@@ -60,6 +111,12 @@ Module SunnysBigAdventure
         Public ReadOnly Property Display As Char
         Public ReadOnly Property Color As ConsoleColor
     End Structure
+    Class Entity
+        Public Sub New(sprite As Sprite)
+            Me.Sprite = sprite
+        End Sub
+        Public Property Sprite As Sprite
+    End Class
     Property CursorPosition As Point
         Get
             Return New Point(CursorLeft, CursorTop)
@@ -68,30 +125,10 @@ Module SunnysBigAdventure
             SetCursorPosition(value.X, value.Y)
         End Set
     End Property
-
-    ReadOnly Happy As New Sprite("☺", White)
-    ReadOnly Sad As New Sprite("☹", White)
-    ReadOnly Sun As New Sprite("☼", Yellow)
-    ReadOnly Evil As New Sprite("☼", Yellow)
-    'Unicode: 
-    '1.1☺☹☠❣❤✌☝✍♨✈⌛⌚☀☁☂❄☃☄♠♥♦♣♟☎⌨✉✏✒✂☢☣↗➡↘↙↖↕↔↩↪✡☸☯✝☦☪☮♈♉♊♋♌♍♎♏♐♑♒♓▶◀♀♂☑✔✖✳✴❇‼〰©®™Ⓜ
-    '   ㊗㊙▪▫☜♅♪♜☌♘☛♞☵☒♛♢✎‍♡☼☴♆☲☇♇☏☨☧☤☥♭☭☽☾❥☍☋☊☬♧☉#☞☶♁♤☷✐♮♖★♝*☰☫♫♙♃☚♬☩♄☓♯☟☈☻☱♕☳♔♩♚♗☡☐
-    '3.0⁉♱♰☙
-    '3.2⤴⤵♻〽◼◻◾◽☖♷⚁⚄⚆⚈♼☗♵⚉⚀⚇♹♲♸⚂♺♴⚅♳♽⚃♶
-    '4.0☕☔⚡⚠⬆⬇⬅⏏⚏⚋⚎⚑⚊⚍⚐⚌
-    '4.1☘⚓⚒⚔⚙⚖⚗⚰⚱♿⚛⚕♾⚜⚫⚪⚩⚭⚢⚥⚘⚤⚦⚨⚣⚬⚮⚚⚯⚧
-    '5.0⚲
-    '5.1⭐⬛⬜⛁⚶⚼⛃⚸⚴⚹⚳⚵⚻⚷⛀⚝⚺⛂
-    '5.2⛷⛹⛰⛪⛩⛲⛺⛽⛵⛴⛅⛈⛱⛄⚽⚾⛳⛸⛑’⛏⛓⛔⭕❗⛟⛙⛞⛮⛶⛯⛜⛡⛿⛣⛊⛐⛾⛉⛚⛘⛠⛆⛝⛌⛕⛬⛍⛫⛖⚞⛨⚟⛻⛋⛒⛛⛭⛇⛼⚿⛗
-    '6.0✋✊⏳⏰⏱⏲✨⛎⏩⏭⏯⏪⏮⏫⏬✅❌❎➕➖➗➰➿❓❔❕⛧⛢⛤ // Right-Handed interlaced pentagram: ⛥ Left-Handed interlaced pentagram: ⛦
-    '7.0⏸⏹⏺
-    '10.₿
-    ReadOnly Rectangles As New List(Of Rectangle)
-    ReadOnly Sprites As New List(Of (Point As Point, Sprite As Sprite))
-
     Sub Redraw()
         ResetColor()
-        For Each rect In Rectangles
+        Console.Clear()
+        For Each rect In Solids
             CursorPosition = rect.TopLeft
             Write("┏"c)
             For i = 1 To rect.Width - 2
@@ -111,24 +148,69 @@ Module SunnysBigAdventure
             Next
             Write("┛"c)
         Next
-        For Each sprite In Sprites
-            CursorPosition = sprite.Point
-            ForegroundColor = sprite.Sprite.Color
-            Write(sprite.Sprite.Display)
+        For Each sprite In Entities
+            CursorPosition = sprite.Key
+            ForegroundColor = sprite.Value.Sprite.Color
+            Write(sprite.Value.Sprite.Display)
         Next
     End Sub
+    Sub Clear()
+        Entities.Clear()
+        Text.Clear()
+        Solids.Clear()
+        Console.Clear()
+    End Sub
+
+    'Unicode: 
+    '1.1☺☹☠❣❤✌☝✍♨✈⌛⌚☀☁☂❄☃☄♠♥♦♣♟☎⌨✉✏✒✂☢☣↗➡↘↙↖↕↔↩↪✡☸☯✝☦☪☮♈♉♊♋♌♍♎♏♐♑♒♓▶◀♀♂☑✔✖✳✴❇‼〰©®™Ⓜ
+    '1.1㊗㊙▪▫☜♅♪♜☌♘☛♞☵☒♛♢✎‍♡☼☴♆☲☇♇☏☨☧☤☥♭☭☽☾❥☍☋☊☬♧☉#☞☶♁♤☷✐♮♖★♝*☰☫♫♙♃☚♬☩♄☓♯☟☈☻☱♕☳♔♩♚♗☡☐
+    '3.0⁉♱♰☙
+    '3.2⤴⤵♻〽◼◻◾◽☖♷⚁⚄⚆⚈♼☗♵⚉⚀⚇♹♲♸⚂♺♴⚅♳♽⚃♶
+    '4.0☕☔⚡⚠⬆⬇⬅⏏⚏⚋⚎⚑⚊⚍⚐⚌
+    '4.1☘⚓⚒⚔⚙⚖⚗⚰⚱♿⚛⚕♾⚜⚫⚪⚩⚭⚢⚥⚘⚤⚦⚨⚣⚬⚮⚚⚯⚧
+    '5.0⚲
+    '5.1⭐⬛⬜⛁⚶⚼⛃⚸⚴⚹⚳⚵⚻⚷⛀⚝⚺⛂
+    '5.2⛷⛹⛰⛪⛩⛲⛺⛽⛵⛴⛅⛈⛱⛄⚽⚾⛳⛸⛑’⛏⛓⛔⭕❗⛟⛙⛞⛮⛶⛯⛜⛡⛿⛣⛊⛐⛾⛉⛚⛘⛠⛆⛝⛌⛕⛬⛍⛫⛖⚞⛨⚟⛻⛋⛒⛛⛭⛇⛼⚿⛗
+    '6.0✋✊⏳⏰⏱⏲✨⛎⏩⏭⏯⏪⏮⏫⏬✅❌❎➕➖➗➰➿❓❔❕⛧⛢⛤ // Right-Handed interlaced pentagram: ⛥ Left-Handed interlaced pentagram: ⛦
+    '7.0⏸⏹⏺
+    '10.₿
+    ReadOnly Sunny_ As New Sprite("☺", ConsoleColor.White)
+    ReadOnly Sunny_Angry As New Sprite("☹", ConsoleColor.Red)
+    ReadOnly Sunny As New Entity(Sunny_)
+
+    ReadOnly Sun_ As New Sprite("☼", ConsoleColor.Yellow)
+    ReadOnly Sun As New Entity(Sun_)
+
+    ReadOnly Horsey_ As New Sprite("♘", ConsoleColor.Magenta)
+    ReadOnly Horsey_Dead As New Sprite("♞", ConsoleColor.DarkMagenta)
+    ReadOnly Horsey As New Entity(Horsey_)
+
+    ReadOnly Entities As New BiDictionary(Of Point, Entity)
+    ReadOnly Text As New Dictionary(Of Point, String)
+    ReadOnly Solids As New List(Of Rectangle)
 
     Sub Main()
-        OutputEncoding = Text.Encoding.Unicode
+        OutputEncoding = New Unicode()
         WindowWidth = 40
         WindowHeight = 20
-        Rectangles.Add(New Rectangle(New Point(0, 0), 2, 2))
-        Sprites.Add((New Point(3, 3), Happy))
-        Sprites.Add((New Point(3, 4), Sad))
-        Sprites.Add((New Point(3, 6), Sun))
-        Redraw()
-        Clear()
-        Write()
-        ReadKey(True)
+        While True
+            Solids.Add(New Rectangle(0, 0, 2, 2))
+            Entities.Add(New Point(3, 3), Sunny)
+            Entities.Add(New Point(3, 6), Sun)
+            Redraw()
+            Dim beginWait = Date.Now
+            While Not KeyAvailable And Date.Now.Subtract(beginWait).TotalSeconds < 5
+                Threading.Thread.Sleep(250)
+                If KeyAvailable Then
+                    Select Case ReadKey(True).Key
+                        Case ConsoleKey.LeftArrow
+
+                        Case ConsoleKey.RightArrow
+                        Case ConsoleKey.UpArrow
+                        Case ConsoleKey.DownArrow
+                    End Select
+                End If
+            End While
+        End While
     End Sub
 End Module
