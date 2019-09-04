@@ -51,14 +51,10 @@ Module SunnysBigAdventure
                 Return TopLeft.Top + Height - 1
             End Get
         End Property
-        Function Contains(point As Point) As Boolean
-            Return Left <= point.Left And point.Left <= Right And Top <= point.Top And point.Top <= Bottom
+        Function SafeContains(point As Point) As Boolean
+            Dim Near = Function(obj As Integer, border As Integer) border - 1 <= obj AndAlso obj <= border + 1
+            Return Near(Left, point.Left) And Near(Right, point.Left) And Near(Top, point.Top) And Near(Bottom, point.Top)
         End Function
-        ReadOnly Property SafeBounds As Rectangle ' Prevent overwriting adjacent sprites
-            Get
-                Return New Rectangle(Left - 1, Top, 3, 1)
-            End Get
-        End Property
         Public Overrides Function ToString() As String
             Return $"({Left}, {Top}) to ({Right}, {Bottom})"
         End Function
@@ -101,109 +97,167 @@ Module SunnysBigAdventure
             Write(sprite.Display)
         End If
     End Sub
-    Interface IEntity
-        Function Contains(point As Point) As Boolean
-    End Interface
-    Interface IMobileEntity
-        Inherits IEntity
-        Sub GoUp()
-        Sub GoDown()
-        Sub GoLeft()
-        Sub GoRight()
-    End Interface
+    MustInherit Class Entity
+        Sub New()
+            _instances.Add(Me)
+        End Sub
+
+        Shared ReadOnly _instances As New List(Of Entity)
+        Public Shared ReadOnly Instances As New ReadOnlyCollection(Of Entity)(_instances)
+        MustOverride Function Contains(point As Point) As Boolean
+        Protected MustOverride Property InnerPosition As Point?
+        Public Property Position As Point?
+            Get
+                Return InnerPosition
+            End Get
+            Set(value As Point?)
+                If value IsNot Nothing Then
+                    For Each entity In Instances
+                        If Me IsNot entity AndAlso entity.Contains(value.GetValueOrDefault()) Then Return
+                    Next
+                End If
+                RedrawAt(value)
+                InnerPosition = value
+            End Set
+        End Property
+        Protected MustOverride Sub RedrawAt(newPosition As Point?)
+        Public Sub GoUp()
+            IfHasValue(Position, Sub(point) Position = New Point(point.Left, Math.Max(point.Top - 1, 0)))
+        End Sub
+        Public Sub GoDown()
+            IfHasValue(Position, Sub(point) Position = New Point(point.Left, Math.Min(BufferHeight, point.Top + 1)))
+        End Sub
+        Public Sub GoLeft()
+            IfHasValue(Position, Sub(point) Position = New Point(Math.Max(point.Left - 1, 0), point.Top))
+        End Sub
+        Public Sub GoRight()
+            IfHasValue(Position, Sub(point) Position = New Point(Math.Min(point.Left + 1, BufferWidth), point.Top))
+        End Sub
+    End Class
     Class SpriteEntity
-        Implements IMobileEntity
+        Inherits Entity
         Public Sub New(sprite As Sprite)
             _sprite = sprite
         End Sub
-        Dim _position As Point?
+        Protected Overrides Property InnerPosition As Point?
         Dim _sprite As Sprite
-        Public Function Contains(point As Point) As Boolean Implements IEntity.Contains
-            Return IfHasValue(_position, Function(pos) New Rectangle(point, 1, 1).SafeBounds.Contains(point), False)
+        Public Overrides Function Contains(point As Point) As Boolean
+            Return IfHasValue(Position, Function(pos) New Rectangle(point, 1, 1).SafeContains(point), False)
         End Function
-        Sub Draw(newPosition As Point?)
-            WriteAt(_position, Empty_)
-            WriteAt(newPosition, _sprite)
+        Protected Overrides Sub RedrawAt(newPosition As Point?)
+            RedrawAt(newPosition, _sprite)
+        End Sub
+        Protected Overloads Sub RedrawAt(newPosition As Point?, newSprite As Sprite)
+            WriteAt(Position, Empty_)
+            WriteAt(newPosition, newSprite)
         End Sub
         Public Property Sprite As Sprite
             Get
                 Return _sprite
             End Get
             Set(value As Sprite)
+                RedrawAt(Position, value)
                 _sprite = value
-                Draw(_position)
             End Set
         End Property
-        Public Property Position As Point?
-            Get
-                Return _position
-            End Get
-            Set(value As Point?)
-                If value IsNot Nothing Then
-                    For Each entity In Entities
-                        If Me IsNot entity AndAlso entity.Contains(value.GetValueOrDefault()) Then Return
-                    Next
-                End If
-                Draw(value)
-                _position = value
-            End Set
-        End Property
-        Public Sub GoUp() Implements IMobileEntity.GoUp
-            IfHasValue(Position, Sub(point) Position = New Point(point.Left, Math.Max(point.Top - 1, 0)))
-        End Sub
-        Public Sub GoDown() Implements IMobileEntity.GoDown
-            IfHasValue(Position, Sub(point) Position = New Point(point.Left, Math.Min(BufferHeight, point.Top + 1)))
-        End Sub
-        Public Sub GoLeft() Implements IMobileEntity.GoLeft
-            IfHasValue(Position, Sub(point) Position = New Point(Math.Max(point.Left - 1, 0), point.Top))
-        End Sub
-        Public Sub GoRight() Implements IMobileEntity.GoRight
-            IfHasValue(Position, Sub(point) Position = New Point(Math.Min(point.Left + 1, BufferWidth), point.Top))
-        End Sub
     End Class
     Class RectangleEntity
-        Implements IEntity
-        Public Property Rectangle As Rectangle
-        Sub New(rect As Rectangle)
-            Rectangle = rect
-            Draw()
-        End Sub
-        Public Function Contains(point As Point) As Boolean Implements IEntity.Contains
-            Return Rectangle.Contains(point)
+        Inherits Entity
+        Dim _rectangle As Rectangle?
+        Public Property Rectangle As Rectangle?
+            Get
+                Return _rectangle
+            End Get
+            Set(value As Rectangle?)
+                RedrawAt(value)
+                _rectangle = value
+            End Set
+        End Property
+        Public Overrides Function Contains(point As Point) As Boolean
+            Return IfHasValue(Rectangle, Function(rect) rect.SafeContains(point), False)
         End Function
-        Sub Draw(Optional horizontal As Char = "━"c, Optional vertical As Char = "┃"c,
-                 Optional topLeft As Char = "┏"c, Optional topRight As Char = "┓"c,
-                 Optional bottomLeft As Char = "┗"c, Optional bottomRight As Char = "┛"c)
-            CursorPosition = Rectangle.TopLeft
-            Write(topLeft)
-            For i = 1 To Rectangle.Width - 2
-                Write(horizontal)
-            Next
-            Write(topRight)
-            For y = 1 To Rectangle.Height - 2
-                SetCursorPosition(Rectangle.Left, y)
-                Write(vertical)
-                SetCursorPosition(Rectangle.Right, y)
-                Write(vertical)
-            Next
-            SetCursorPosition(Rectangle.Left, Rectangle.Bottom)
-            Write(bottomLeft)
-            For i = 1 To Rectangle.Width - 2
-                Write(bottomRight)
-            Next
-            Write(bottomRight)
+        Protected Overrides Property InnerPosition As Point?
+            Get
+                Return Rectangle?.TopLeft
+            End Get
+            Set(value As Point?)
+                Rectangle = IfHasValue(value, Function(point) IfHasValue(Rectangle,
+                        Function(rect) New Rectangle(point, rect.Width, rect.Height),
+                        New Rectangle(point, 1, 1)), New Rectangle?())
+            End Set
+        End Property
+        Protected Overrides Sub RedrawAt(newPosition As Point?)
+        End Sub
+        Overloads Sub RedrawAt(newRect As Rectangle?)
+            Draw(Rectangle, Empty, Empty, Empty, Empty, Empty, Empty)
+            Draw(newRect, "━"c, "┃"c, "┏"c, "┓"c, "┗"c, "┛"c)
+        End Sub
+        Sub Draw(rectangle As Rectangle?, horizontal As Char, vertical As Char, topLeft As Char, topRight As Char, bottomLeft As Char, bottomRight As Char)
+            IfHasValue(rectangle,
+                       Sub(rect)
+                           CursorPosition = rect.TopLeft
+                           Write(topLeft)
+                           For i = 1 To rect.Width - 2
+                               Write(horizontal)
+                           Next
+                           Write(topRight)
+                           For y = 1 To rect.Height - 2
+                               SetCursorPosition(rect.Left, y)
+                               Write(vertical)
+                               SetCursorPosition(rect.Right, y)
+                               Write(vertical)
+                           Next
+                           SetCursorPosition(rect.Left, rect.Bottom)
+                           Write(bottomLeft)
+                           For i = 1 To rect.Width - 2
+                               Write(bottomRight)
+                           Next
+                           Write(bottomRight)
+                       End Sub)
         End Sub
     End Class
     Class TextEntity
-        Implements IEntity
+        Inherits Entity
+        Protected Overrides Property InnerPosition As Point?
+        Dim _text As String
         Public Property Text As String
-        Public Property Position As Point?
+            Get
+                Return _text
+            End Get
+            Set(value As String)
+                RedrawAt(Position, value)
+                _text = value
+            End Set
+        End Property
         Sub New(text As String)
             Me.Text = text
         End Sub
-        Public Function Contains(point As Point) As Boolean Implements IEntity.Contains
-            Return IfHasValue(Position, Function(pos) New Rectangle(pos, Text.Length, 1).SafeBounds.Contains(point), False)
+        Public Overrides Function Contains(point As Point) As Boolean
+            Return IfHasValue(Position, Function(pos) New Rectangle(pos, Text.Length, 1).SafeContains(point), False)
         End Function
+        Protected Overrides Sub RedrawAt(newPosition As Point?)
+            RedrawAt(newPosition, Text)
+        End Sub
+        Protected Overloads Sub RedrawAt(newPosition As Point?, newText As String)
+            IfHasValue(Position, Sub(point)
+                                     ResetColor()
+                                     CursorPosition = point
+                                     For i = 1 To Text.Length
+                                         Write(Empty)
+                                     Next
+                                 End Sub)
+            IfHasValue(newPosition, Sub(point)
+                                        ResetColor()
+                                        CursorPosition = point
+                                        Write(newText)
+                                    End Sub)
+        End Sub
+    End Class
+    Class Region
+        Dim Left As Region
+        Dim Right As Region
+
+
     End Class
 #End Region
 #Region "Entities"
@@ -234,12 +288,15 @@ Module SunnysBigAdventure
     ReadOnly Horsey_Dead As New Sprite("♞"c, ConsoleColor.DarkMagenta)
     ReadOnly Horsey As New SpriteEntity(Horsey_)
 
-    ReadOnly Rect As New RectangleEntity(New Rectangle(0, 0, 2, 2))
+    ReadOnly Rect As New RectangleEntity()
+
+    ReadOnly SBA As New TextEntity("")
 
     Dim ActiveEntity As SpriteEntity = Sunny
-    ReadOnly Entities As New List(Of IEntity)
 #End Region
+#Region "Regions"
 
+#End Region
     Sub Main()
         If LargestWindowWidth < 48 Or LargestWindowHeight < 10 Then
             WriteLine("ERROR: Please decrease font size")
