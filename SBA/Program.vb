@@ -98,12 +98,11 @@ Module SunnysBigAdventure
         End If
     End Sub
     MustInherit Class Entity
-        Sub New()
-            _instances.Add(Me)
+        ReadOnly Entities As ICollection(Of Entity)
+        Sub New(entities As ICollection(Of Entity))
+            Me.Entities = entities
+            entities.Add(Me)
         End Sub
-
-        Shared ReadOnly _instances As New List(Of Entity)
-        Public Shared ReadOnly Instances As New ReadOnlyCollection(Of Entity)(_instances)
         MustOverride Function Contains(point As Point) As Boolean
         Protected MustOverride Property InnerPosition As Point?
         Public Property Position As Point?
@@ -112,7 +111,7 @@ Module SunnysBigAdventure
             End Get
             Set(value As Point?)
                 If value IsNot Nothing Then
-                    For Each entity In Instances
+                    For Each entity In Entities
                         If Me IsNot entity AndAlso entity.Contains(value.GetValueOrDefault()) Then Return
                     Next
                 End If
@@ -136,7 +135,8 @@ Module SunnysBigAdventure
     End Class
     Class SpriteEntity
         Inherits Entity
-        Public Sub New(sprite As Sprite)
+        Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
+            MyBase.New(entities)
             _sprite = sprite
         End Sub
         Protected Overrides Property InnerPosition As Point?
@@ -163,6 +163,9 @@ Module SunnysBigAdventure
     End Class
     Class RectangleEntity
         Inherits Entity
+        Public Sub New(entities As ICollection(Of Entity))
+            MyBase.New(entities)
+        End Sub
         Dim _rectangle As Rectangle?
         Public Property Rectangle As Rectangle?
             Get
@@ -218,6 +221,10 @@ Module SunnysBigAdventure
     End Class
     Class TextEntity
         Inherits Entity
+        Public Sub New(entities As ICollection(Of Entity), text As String)
+            MyBase.New(entities)
+            Me.Text = text
+        End Sub
         Protected Overrides Property InnerPosition As Point?
         Dim _text As String
         Public Property Text As String
@@ -229,9 +236,6 @@ Module SunnysBigAdventure
                 _text = value
             End Set
         End Property
-        Sub New(text As String)
-            Me.Text = text
-        End Sub
         Public Overrides Function Contains(point As Point) As Boolean
             Return IfHasValue(Position, Function(pos) New Rectangle(pos, Text.Length, 1).SafeContains(point), False)
         End Function
@@ -257,7 +261,23 @@ Module SunnysBigAdventure
         Dim Left As Region
         Dim Right As Region
 
+        Dim Entities As New List(Of Entity)
+        Public ReadOnly Sunny_ As New Sprite("☺"c)
+        Public ReadOnly Sunny_Angry As New Sprite("☹"c, ConsoleColor.Red)
+        Public ReadOnly Sunny As New SpriteEntity(Entities, Sunny_)
 
+        Public ReadOnly Sun_ As New Sprite("☼"c, ConsoleColor.Yellow)
+        Public ReadOnly Sun As New SpriteEntity(Entities, Sun_)
+
+        Public ReadOnly Horsey_ As New Sprite("♘"c, ConsoleColor.Magenta)
+        Public ReadOnly Horsey_Dead As New Sprite("♞"c, ConsoleColor.DarkMagenta)
+        Public ReadOnly Horsey As New SpriteEntity(Entities, Horsey_)
+
+        Public ReadOnly Rect As New RectangleEntity(Entities)
+
+        Public ReadOnly SBA As New TextEntity(Entities, "")
+
+        Public ActiveEntity As SpriteEntity = Sunny
     End Class
 #End Region
 #Region "Entities"
@@ -277,25 +297,9 @@ Module SunnysBigAdventure
     Const Empty = " "c
     ReadOnly Empty_ As New Sprite(Empty)
 
-    ReadOnly Sunny_ As New Sprite("☺"c)
-    ReadOnly Sunny_Angry As New Sprite("☹"c, ConsoleColor.Red)
-    ReadOnly Sunny As New SpriteEntity(Sunny_)
-
-    ReadOnly Sun_ As New Sprite("☼"c, ConsoleColor.Yellow)
-    ReadOnly Sun As New SpriteEntity(Sun_)
-
-    ReadOnly Horsey_ As New Sprite("♘"c, ConsoleColor.Magenta)
-    ReadOnly Horsey_Dead As New Sprite("♞"c, ConsoleColor.DarkMagenta)
-    ReadOnly Horsey As New SpriteEntity(Horsey_)
-
-    ReadOnly Rect As New RectangleEntity()
-
-    ReadOnly SBA As New TextEntity("")
-
-    Dim ActiveEntity As SpriteEntity = Sunny
 #End Region
 #Region "Regions"
-
+    Dim CurrentRegion As Region = New Region()
 #End Region
     Sub Main()
         If LargestWindowWidth < 48 Or LargestWindowHeight < 10 Then
@@ -306,16 +310,16 @@ Module SunnysBigAdventure
         WindowWidth = 48
         WindowHeight = 10
         CursorVisible = False
-        Sunny.Position = New Point(3, 3)
-        Sun.Position = New Point(3, 6)
-        Horsey.Position = New Point(3, 8)
+        CurrentRegion.Sunny.Position = New Point(3, 3)
+        CurrentRegion.Sun.Position = New Point(3, 6)
+        CurrentRegion.Horsey.Position = New Point(3, 8)
         While True
             Dim key = ReadKey(TimeSpan.FromSeconds(1))
             Select Case key
-                Case ConsoleKey.LeftArrow : ActiveEntity.GoLeft()
-                Case ConsoleKey.RightArrow : ActiveEntity.GoRight()
-                Case ConsoleKey.UpArrow : ActiveEntity.GoUp()
-                Case ConsoleKey.DownArrow : ActiveEntity.GoDown()
+                Case ConsoleKey.LeftArrow : CurrentRegion.ActiveEntity.GoLeft()
+                Case ConsoleKey.RightArrow : CurrentRegion.ActiveEntity.GoRight()
+                Case ConsoleKey.UpArrow : CurrentRegion.ActiveEntity.GoUp()
+                Case ConsoleKey.DownArrow : CurrentRegion.ActiveEntity.GoDown()
                 Case Else
             End Select
             Debug.WriteLine(key)
