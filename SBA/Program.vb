@@ -1,4 +1,5 @@
 ﻿Imports System.Console
+Imports System.Collections.ObjectModel
 Imports Unicode = System.Text.UnicodeEncoding
 
 Module SunnysBigAdventure
@@ -89,13 +90,25 @@ Module SunnysBigAdventure
         End Sub
         Dim _position As Point?
         Dim _sprite As Sprite
+        Sub Draw(newPosition As Point?)
+            If _position.HasValue Then
+                CursorPosition = _position.GetValueOrDefault()
+                Write(" "c)
+            End If
+            If newPosition.HasValue Then
+                CursorPosition = newPosition.GetValueOrDefault()
+                ForegroundColor = _sprite.Color
+                Write(_sprite.Display)
+                _position = newPosition
+            End If
+        End Sub
         Public Property Sprite As Sprite
             Get
                 Return _sprite
             End Get
             Set(value As Sprite)
                 _sprite = value
-                Dirty = True
+                Draw(_position)
             End Set
         End Property
         Public Property Position As Point?
@@ -104,8 +117,7 @@ Module SunnysBigAdventure
             End Get
             Set(value As Point?)
                 If value Is Nothing Then
-                    _position = value
-                    Dirty = True
+                    Draw(value)
                     Return
                 End If
                 For Each entity In Entities
@@ -114,8 +126,7 @@ Module SunnysBigAdventure
                 For Each rect In Solids
                     If rect.Contains(value) Then Return
                 Next
-                _position = value
-                Dirty = True
+                Draw(value)
             End Set
         End Property
     End Class
@@ -137,8 +148,6 @@ Module SunnysBigAdventure
         Return Nothing
     End Function
     Sub Redraw()
-        If Not Dirty Then Return
-        Dirty = False
         ResetColor()
         Console.Clear()
         For Each rect In Solids
@@ -202,18 +211,23 @@ Module SunnysBigAdventure
 
     ReadOnly Entities As New List(Of Entity) From {Sun, Horsey, Sunny}
     ReadOnly Text As New Dictionary(Of Point, String)
-    ReadOnly Solids As New List(Of Rectangle)
-    Dim Dirty As Boolean
+    ReadOnly Solids As New ObservableCollection(Of Rectangle)
 
     Sub Main()
         OutputEncoding = New Unicode()
-        WindowWidth = 40
-        WindowHeight = 20
+        If LargestWindowWidth < 48 Or LargestWindowHeight < 10 Then
+            WriteLine("ERROR: Please decrease font size")
+            Return
+        End If
+        WindowWidth = 48
+        WindowHeight = 10
+        AddHandler Solids.CollectionChanged, Sub(sender, e)
+
+                                             End Sub
         Solids.Add(New Rectangle(0, 0, 2, 2))
         Sunny.Position = New Point(3, 3)
         Sun.Position = New Point(3, 6)
         While True
-            Redraw()
             Dim key = ReadKey(TimeSpan.FromSeconds(1))
             Select Case key
                 Case ConsoleKey.LeftArrow
