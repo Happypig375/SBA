@@ -1,8 +1,20 @@
 ﻿Imports System.Console
 Imports System.Collections.ObjectModel
 Imports Unicode = System.Text.UnicodeEncoding
+Imports SBA
 
 Module SunnysBigAdventure
+#Region "Foundation"
+    Interface IEntity
+        Function Contains(point As Point) As Boolean
+    End Interface
+    Interface IMobileEntity
+        Inherits IEntity
+        Sub GoUp()
+        Sub GoDown()
+        Sub GoLeft()
+        Sub GoRight()
+    End Interface
     Structure Point
         Public Sub New(left As Integer, top As Integer)
             Me.Left = left
@@ -13,26 +25,6 @@ Module SunnysBigAdventure
         Public Overrides Function ToString() As String
             Return $"({Left}, {Top})"
         End Function
-        Public ReadOnly Property ToUp As Point
-            Get
-                Return New Point(Left, Math.Max(Top - 1, 0))
-            End Get
-        End Property
-        Public ReadOnly Property ToDown As Point
-            Get
-                Return New Point(Left, Math.Min(BufferHeight, Top + 1))
-            End Get
-        End Property
-        Public ReadOnly Property ToLeft As Point
-            Get
-                Return New Point(Math.Max(Left - 1, 0), Top)
-            End Get
-        End Property
-        Public ReadOnly Property ToRight As Point
-            Get
-                Return New Point(Math.Min(Left + 1, BufferWidth), Top)
-            End Get
-        End Property
     End Structure
     Structure Rectangle
         Public Sub New(top As Integer, left As Integer, width As Integer, height As Integer)
@@ -76,31 +68,49 @@ Module SunnysBigAdventure
             Return $"({Left}, {Top}) to ({Right}, {Bottom})"
         End Function
     End Structure
+    Function ReadKey(timeout As TimeSpan) As ConsoleKey?
+        If KeyAvailable Then Return Console.ReadKey(True).Key
+        Dim beginWait = Date.Now
+        While Not KeyAvailable And Date.Now.Subtract(beginWait) < timeout
+            Threading.Thread.Sleep(100)
+            If KeyAvailable Then Return Console.ReadKey(True).Key
+        End While
+        Return Nothing
+    End Function
+    Sub WriteAt(position As Point?, sprite As Sprite)
+        If position.HasValue Then
+            CursorPosition = position.GetValueOrDefault()
+            ForegroundColor = sprite.Color
+            Write(sprite.Display)
+        End If
+    End Sub
+    Sub IfHasValue(Of T As Structure)(nullable As T?, f As Action(Of T))
+        If nullable.HasValue Then f(nullable.GetValueOrDefault())
+    End Sub
+    Function IfHasValue(Of T As Structure, TReturn)(nullable As T?, f As Func(Of T, TReturn), defaultValue As TReturn) As TReturn
+        Return If(nullable.HasValue, f(nullable.GetValueOrDefault()), defaultValue)
+    End Function
     Structure Sprite
-        Public Sub New(display As Char, color As ConsoleColor) ' Consoles don't support surrogate pairs
+        Public Sub New(display As Char, Optional color As ConsoleColor = ConsoleColor.White) ' Consoles don't support surrogate pairs
             Me.Display = display
             Me.Color = color
         End Sub
         Public ReadOnly Property Display As Char
         Public ReadOnly Property Color As ConsoleColor
     End Structure
-    Class Entity
+    Class SpriteEntity
+        Implements IMobileEntity
         Public Sub New(sprite As Sprite)
-            Me.Sprite = sprite
+            _sprite = sprite
         End Sub
         Dim _position As Point?
         Dim _sprite As Sprite
+        Public Function Contains(point As Point) As Boolean Implements IEntity.Contains
+            Return IfHasValue(_position, Function(pos) New Rectangle(pos.Left - 1, pos.Top, 3, 1).Contains(point), False) ' Prevent overwriting adjacent sprites
+        End Function
         Sub Draw(newPosition As Point?)
-            If _position.HasValue Then
-                CursorPosition = _position.GetValueOrDefault()
-                Write(" "c)
-            End If
-            If newPosition.HasValue Then
-                CursorPosition = newPosition.GetValueOrDefault()
-                ForegroundColor = _sprite.Color
-                Write(_sprite.Display)
-                _position = newPosition
-            End If
+            WriteAt(_position, Empty_)
+            WriteAt(newPosition, _sprite)
         End Sub
         Public Property Sprite As Sprite
             Get
@@ -116,19 +126,60 @@ Module SunnysBigAdventure
                 Return _position
             End Get
             Set(value As Point?)
-                If value Is Nothing Then
-                    Draw(value)
-                    Return
+                If value IsNot Nothing Then
+                    For Each entity In Entities
+                        If Me IsNot entity AndAlso entity.Contains(value.GetValueOrDefault()) Then Return
+                    Next
                 End If
-                For Each entity In Entities
-                    If entity.Position.GetValueOrDefault().Equals(value) Then Return
-                Next
-                For Each rect In Solids
-                    If rect.Contains(value) Then Return
-                Next
                 Draw(value)
+                _position = value
             End Set
         End Property
+        Public Sub GoUp() Implements IMobileEntity.GoUp
+            IfHasValue(Position, Sub(point) Position = New Point(point.Left, Math.Max(point.Top - 1, 0)))
+        End Sub
+        Public Sub GoDown() Implements IMobileEntity.GoDown
+            IfHasValue(Position, Sub(point) Position = New Point(point.Left, Math.Min(BufferHeight, point.Top + 1)))
+        End Sub
+        Public Sub GoLeft() Implements IMobileEntity.GoLeft
+            IfHasValue(Position, Sub(point) Position = New Point(Math.Max(point.Left - 1, 0), point.Top))
+        End Sub
+        Public Sub GoRight() Implements IMobileEntity.GoRight
+            IfHasValue(Position, Sub(point) Position = New Point(Math.Min(point.Left + 1, BufferWidth), point.Top))
+        End Sub
+    End Class
+    Class RectangleEntity
+        Implements IEntity
+        Public Property Rectangle As Rectangle
+        Sub New(rect As Rectangle)
+            Rectangle = rect
+            Draw()
+        End Sub
+        Public Function Contains(point As Point) As Boolean Implements IEntity.Contains
+            Return Rectangle.Contains(point)
+        End Function
+        Sub Draw(Optional horizontal As Char = "━"c, Optional vertical As Char = "┃"c,
+                 Optional topLeft As Char = "┏"c, Optional topRight As Char = "┓"c,
+                 Optional bottomLeft As Char = "┗"c, Optional bottomRight As Char = "┛"c)
+            CursorPosition = Rectangle.TopLeft
+            Write(topLeft)
+            For i = 1 To Rectangle.Width - 2
+                Write(horizontal)
+            Next
+            Write(topRight)
+            For y = 1 To Rectangle.Height - 2
+                SetCursorPosition(Rectangle.Left, y)
+                Write(vertical)
+                SetCursorPosition(Rectangle.Right, y)
+                Write(vertical)
+            Next
+            SetCursorPosition(Rectangle.Left, Rectangle.Bottom)
+            Write(bottomLeft)
+            For i = 1 To Rectangle.Width - 2
+                Write(bottomRight)
+            Next
+            Write(bottomRight)
+        End Sub
     End Class
     Property CursorPosition As Point
         Get
@@ -138,53 +189,13 @@ Module SunnysBigAdventure
             SetCursorPosition(value.Left, value.Top)
         End Set
     End Property
-    Function ReadKey(timeout As TimeSpan) As ConsoleKey?
-        If KeyAvailable Then Return Console.ReadKey(True).Key
-        Dim beginWait = Date.Now
-        While Not KeyAvailable And Date.Now.Subtract(beginWait) < timeout
-            Threading.Thread.Sleep(100)
-            If KeyAvailable Then Return Console.ReadKey(True).Key
-        End While
-        Return Nothing
-    End Function
-    Sub Redraw()
-        ResetColor()
-        Console.Clear()
-        For Each rect In Solids
-            CursorPosition = rect.TopLeft
-            Write("┏"c)
-            For i = 1 To rect.Width - 2
-                Write("━"c)
-            Next
-            Write("┓"c)
-            For y = 1 To rect.Height - 2
-                SetCursorPosition(rect.Left, y)
-                Write("┃"c)
-                SetCursorPosition(rect.Right, y)
-                Write("┃"c)
-            Next
-            SetCursorPosition(rect.Left, rect.Bottom)
-            Write("┗"c)
-            For i = 1 To rect.Width - 2
-                Write("━"c)
-            Next
-            Write("┛"c)
-        Next
-        For Each entity In Entities
-            If entity.Position.HasValue Then
-                CursorPosition = entity.Position.GetValueOrDefault()
-                ForegroundColor = entity.Sprite.Color
-                Write(entity.Sprite.Display)
-            End If
-        Next
-    End Sub
     Sub Clear()
         Entities.Clear()
         Text.Clear()
-        Solids.Clear()
         Console.Clear()
     End Sub
-
+#End Region
+#Region "Entities"
     'Unicode: 
     '1.1☺☹☠❣❤✌☝✍♨✈⌛⌚☀☁☂❄☃☄♠♥♦♣♟☎⌨✉✏✒✂☢☣↗➡↘↙↖↕↔↩↪✡☸☯✝☦☪☮♈♉♊♋♌♍♎♏♐♑♒♓▶◀♀♂☑✔✖✳✴❇‼〰©®™Ⓜ
     '1.1㊗㊙▪▫☜♅♪♜☌♘☛♞☵☒♛♢✎‍♡☼☴♆☲☇♇☏☨☧☤☥♭☭☽☾❥☍☋☊☬♧☉#☞☶♁♤☷✐♮♖★♝*☰☫♫♙♃☚♬☩♄☓♯☟☈☻☱♕☳♔♩♚♗☡☐
@@ -198,53 +209,48 @@ Module SunnysBigAdventure
     '6.0✋✊⏳⏰⏱⏲✨⛎⏩⏭⏯⏪⏮⏫⏬✅❌❎➕➖➗➰➿❓❔❕⛧⛢⛤ // Right-Handed interlaced pentagram: ⛥ Left-Handed interlaced pentagram: ⛦
     '7.0⏸⏹⏺
     '10.₿
-    ReadOnly Sunny_ As New Sprite("☺", ConsoleColor.White)
-    ReadOnly Sunny_Angry As New Sprite("☹", ConsoleColor.Red)
-    ReadOnly Sunny As New Entity(Sunny_)
+    Const Empty = " "c
+    ReadOnly Empty_ As New Sprite(Empty)
 
-    ReadOnly Sun_ As New Sprite("☼", ConsoleColor.Yellow)
-    ReadOnly Sun As New Entity(Sun_)
+    ReadOnly Sunny_ As New Sprite("☺"c)
+    ReadOnly Sunny_Angry As New Sprite("☹"c, ConsoleColor.Red)
+    ReadOnly Sunny As New SpriteEntity(Sunny_)
 
-    ReadOnly Horsey_ As New Sprite("♘", ConsoleColor.Magenta)
-    ReadOnly Horsey_Dead As New Sprite("♞", ConsoleColor.DarkMagenta)
-    ReadOnly Horsey As New Entity(Horsey_)
+    ReadOnly Sun_ As New Sprite("☼"c, ConsoleColor.Yellow)
+    ReadOnly Sun As New SpriteEntity(Sun_)
 
-    ReadOnly Entities As New List(Of Entity) From {Sun, Horsey, Sunny}
+    ReadOnly Horsey_ As New Sprite("♘"c, ConsoleColor.Magenta)
+    ReadOnly Horsey_Dead As New Sprite("♞"c, ConsoleColor.DarkMagenta)
+    ReadOnly Horsey As New SpriteEntity(Horsey_)
+
+    Dim ActiveEntity As SpriteEntity = Sunny
+
+    ReadOnly Entities As New List(Of IEntity) From {Sun, Horsey, Sunny}
     ReadOnly Text As New Dictionary(Of Point, String)
-    ReadOnly Solids As New ObservableCollection(Of Rectangle)
+#End Region
 
     Sub Main()
-        OutputEncoding = New Unicode()
         If LargestWindowWidth < 48 Or LargestWindowHeight < 10 Then
             WriteLine("ERROR: Please decrease font size")
             Return
         End If
+        OutputEncoding = New Unicode()
         WindowWidth = 48
         WindowHeight = 10
-        AddHandler Solids.CollectionChanged, Sub(sender, e)
-
-                                             End Sub
-        Solids.Add(New Rectangle(0, 0, 2, 2))
+        CursorVisible = False
+        Entities.Add(New RectangleEntity(New Rectangle(0, 0, 2, 2)))
         Sunny.Position = New Point(3, 3)
         Sun.Position = New Point(3, 6)
         While True
             Dim key = ReadKey(TimeSpan.FromSeconds(1))
             Select Case key
-                Case ConsoleKey.LeftArrow
-                    If Sunny.Position.HasValue Then Sunny.Position = Sunny.Position.GetValueOrDefault().ToLeft
-                    Debug.WriteLine(ConsoleKey.LeftArrow)
-                Case ConsoleKey.RightArrow
-                    If Sunny.Position.HasValue Then Sunny.Position = Sunny.Position.GetValueOrDefault().ToRight
-                    Debug.WriteLine(ConsoleKey.RightArrow)
-                Case ConsoleKey.UpArrow
-                    If Sunny.Position.HasValue Then Sunny.Position = Sunny.Position.GetValueOrDefault().ToUp
-                    Debug.WriteLine(ConsoleKey.UpArrow)
-                Case ConsoleKey.DownArrow
-                    If Sunny.Position.HasValue Then Sunny.Position = Sunny.Position.GetValueOrDefault().ToDown
-                    Debug.WriteLine(ConsoleKey.DownArrow)
+                Case ConsoleKey.LeftArrow : ActiveEntity.GoLeft()
+                Case ConsoleKey.RightArrow : ActiveEntity.GoRight()
+                Case ConsoleKey.UpArrow : ActiveEntity.GoUp()
+                Case ConsoleKey.DownArrow : ActiveEntity.GoDown()
                 Case Else
-                    Debug.WriteLine(key)
             End Select
+            Debug.WriteLine(key)
         End While
     End Sub
 End Module
