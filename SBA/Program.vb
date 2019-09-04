@@ -5,16 +5,6 @@ Imports SBA
 
 Module SunnysBigAdventure
 #Region "Foundation"
-    Interface IEntity
-        Function Contains(point As Point) As Boolean
-    End Interface
-    Interface IMobileEntity
-        Inherits IEntity
-        Sub GoUp()
-        Sub GoDown()
-        Sub GoLeft()
-        Sub GoRight()
-    End Interface
     Structure Point
         Public Sub New(left As Integer, top As Integer)
             Me.Left = left
@@ -64,10 +54,37 @@ Module SunnysBigAdventure
         Function Contains(point As Point) As Boolean
             Return Left <= point.Left And point.Left <= Right And Top <= point.Top And point.Top <= Bottom
         End Function
+        ReadOnly Property SafeBounds As Rectangle ' Prevent overwriting adjacent sprites
+            Get
+                Return New Rectangle(Left - 1, Top, 3, 1)
+            End Get
+        End Property
         Public Overrides Function ToString() As String
             Return $"({Left}, {Top}) to ({Right}, {Bottom})"
         End Function
     End Structure
+    Structure Sprite
+        Public Sub New(display As Char, Optional color As ConsoleColor = ConsoleColor.White) ' Consoles don't support surrogate pairs
+            Me.Display = display
+            Me.Color = color
+        End Sub
+        Public ReadOnly Property Display As Char
+        Public ReadOnly Property Color As ConsoleColor
+    End Structure
+    Property CursorPosition As Point
+        Get
+            Return New Point(CursorLeft, CursorTop)
+        End Get
+        Set(value As Point)
+            SetCursorPosition(value.Left, value.Top)
+        End Set
+    End Property
+    Sub IfHasValue(Of T As Structure)(nullable As T?, f As Action(Of T))
+        If nullable.HasValue Then f(nullable.GetValueOrDefault())
+    End Sub
+    Function IfHasValue(Of T As Structure, TReturn)(nullable As T?, f As Func(Of T, TReturn), defaultValue As TReturn) As TReturn
+        Return If(nullable.HasValue, f(nullable.GetValueOrDefault()), defaultValue)
+    End Function
     Function ReadKey(timeout As TimeSpan) As ConsoleKey?
         If KeyAvailable Then Return Console.ReadKey(True).Key
         Dim beginWait = Date.Now
@@ -84,20 +101,16 @@ Module SunnysBigAdventure
             Write(sprite.Display)
         End If
     End Sub
-    Sub IfHasValue(Of T As Structure)(nullable As T?, f As Action(Of T))
-        If nullable.HasValue Then f(nullable.GetValueOrDefault())
-    End Sub
-    Function IfHasValue(Of T As Structure, TReturn)(nullable As T?, f As Func(Of T, TReturn), defaultValue As TReturn) As TReturn
-        Return If(nullable.HasValue, f(nullable.GetValueOrDefault()), defaultValue)
-    End Function
-    Structure Sprite
-        Public Sub New(display As Char, Optional color As ConsoleColor = ConsoleColor.White) ' Consoles don't support surrogate pairs
-            Me.Display = display
-            Me.Color = color
-        End Sub
-        Public ReadOnly Property Display As Char
-        Public ReadOnly Property Color As ConsoleColor
-    End Structure
+    Interface IEntity
+        Function Contains(point As Point) As Boolean
+    End Interface
+    Interface IMobileEntity
+        Inherits IEntity
+        Sub GoUp()
+        Sub GoDown()
+        Sub GoLeft()
+        Sub GoRight()
+    End Interface
     Class SpriteEntity
         Implements IMobileEntity
         Public Sub New(sprite As Sprite)
@@ -106,7 +119,7 @@ Module SunnysBigAdventure
         Dim _position As Point?
         Dim _sprite As Sprite
         Public Function Contains(point As Point) As Boolean Implements IEntity.Contains
-            Return IfHasValue(_position, Function(pos) New Rectangle(pos.Left - 1, pos.Top, 3, 1).Contains(point), False) ' Prevent overwriting adjacent sprites
+            Return IfHasValue(_position, Function(pos) New Rectangle(point, 1, 1).SafeBounds.Contains(point), False)
         End Function
         Sub Draw(newPosition As Point?)
             WriteAt(_position, Empty_)
@@ -181,19 +194,17 @@ Module SunnysBigAdventure
             Write(bottomRight)
         End Sub
     End Class
-    Property CursorPosition As Point
-        Get
-            Return New Point(CursorLeft, CursorTop)
-        End Get
-        Set(value As Point)
-            SetCursorPosition(value.Left, value.Top)
-        End Set
-    End Property
-    Sub Clear()
-        Entities.Clear()
-        Text.Clear()
-        Console.Clear()
-    End Sub
+    Class TextEntity
+        Implements IEntity
+        Public Property Text As String
+        Public Property Position As Point?
+        Sub New(text As String)
+            Me.Text = text
+        End Sub
+        Public Function Contains(point As Point) As Boolean Implements IEntity.Contains
+            Return IfHasValue(Position, Function(pos) New Rectangle(pos, Text.Length, 1).SafeBounds.Contains(point), False)
+        End Function
+    End Class
 #End Region
 #Region "Entities"
     'Unicode: 
@@ -223,10 +234,10 @@ Module SunnysBigAdventure
     ReadOnly Horsey_Dead As New Sprite("♞"c, ConsoleColor.DarkMagenta)
     ReadOnly Horsey As New SpriteEntity(Horsey_)
 
-    Dim ActiveEntity As SpriteEntity = Sunny
+    ReadOnly Rect As New RectangleEntity(New Rectangle(0, 0, 2, 2))
 
-    ReadOnly Entities As New List(Of IEntity) From {Sun, Horsey, Sunny}
-    ReadOnly Text As New Dictionary(Of Point, String)
+    Dim ActiveEntity As SpriteEntity = Sunny
+    ReadOnly Entities As New List(Of IEntity)
 #End Region
 
     Sub Main()
@@ -238,9 +249,9 @@ Module SunnysBigAdventure
         WindowWidth = 48
         WindowHeight = 10
         CursorVisible = False
-        Entities.Add(New RectangleEntity(New Rectangle(0, 0, 2, 2)))
         Sunny.Position = New Point(3, 3)
         Sun.Position = New Point(3, 6)
+        Horsey.Position = New Point(3, 8)
         While True
             Dim key = ReadKey(TimeSpan.FromSeconds(1))
             Select Case key
