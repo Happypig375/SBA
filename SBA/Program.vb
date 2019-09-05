@@ -5,6 +5,21 @@ Imports SBA
 
 Module SunnysBigAdventure
 #Region "Structures"
+    Structure Delta(Of T)
+        Sub New(unchanged As T)
+            Changed = False
+            OldValue = unchanged
+            NewValue = unchanged
+        End Sub
+        Sub New(oldValue As T, newValue As T)
+            Changed = True
+            Me.OldValue = oldValue
+            Me.NewValue = newValue
+        End Sub
+        Public ReadOnly Property Changed As Boolean
+        Public ReadOnly Property OldValue As T
+        Public ReadOnly Property NewValue As T
+    End Structure
     Structure Point
         Public Sub New(left As Integer, top As Integer)
             Me.Left = left
@@ -51,9 +66,10 @@ Module SunnysBigAdventure
                 Return TopLeft.Top + Height - 1
             End Get
         End Property
-        Function SafeContains(point As Point) As Boolean
-            Dim Near = Function(obj As Integer, border As Integer) border - 1 <= obj AndAlso obj <= border + 1
-            Return Near(Left, point.Left) And Near(Right, point.Left) And Near(Top, point.Top) And Near(Bottom, point.Top)
+        Function CollidesWith(other As Rectangle) As Boolean
+            Dim NextTo = Function(obj As Integer, border As Integer) border - 1 <= obj AndAlso obj <= border + 1
+            Return (NextTo(other.Left, Left) OrElse NextTo(other.Right, Right)) AndAlso
+                   ((other.Top = Top) OrElse (other.Bottom = Bottom))
         End Function
         Public Overrides Function ToString() As String
             Return $"({Left}, {Top}) to ({Right}, {Bottom})"
@@ -80,6 +96,12 @@ Module SunnysBigAdventure
     Sub IfHasValue(Of T As Structure)(nullable As T?, f As Action(Of T))
         If nullable.HasValue Then f(nullable.GetValueOrDefault())
     End Sub
+    Function IfHasValue(Of T As Structure, TReturn As Structure)(nullable As T?, f As Func(Of T, TReturn)) As TReturn?
+        Return If(nullable.HasValue, f(nullable.GetValueOrDefault()), New TReturn?())
+    End Function
+    Function IfHasValue(Of T As Structure, TReturn As Structure)(nullable As T?, f As Func(Of T, TReturn?)) As TReturn?
+        Return If(nullable.HasValue, f(nullable.GetValueOrDefault()), New TReturn?())
+    End Function
     Function IfHasValue(Of T As Structure, TReturn)(nullable As T?, f As Func(Of T, TReturn), defaultValue As TReturn) As TReturn
         Return If(nullable.HasValue, f(nullable.GetValueOrDefault()), defaultValue)
     End Function
@@ -105,23 +127,34 @@ Module SunnysBigAdventure
         Sub New(entities As ICollection(Of Entity))
             entities.Add(Me)
         End Sub
-        MustOverride Function Contains(point As Point) As Boolean
-        Protected MustOverride Property InnerPosition As Point?
-        Public Property Position As Point?
+        Protected MustOverride Sub RedrawAt(bounds As Delta(Of Rectangle?))
+        Public Function CollidesWith(bounds As Rectangle) As Boolean
+            Return IfHasValue(Me.Bounds, Function(box) box.CollidesWith(bounds), False)
+        End Function
+        Dim _bounds As Rectangle?
+        Protected Property Bounds As Rectangle?
             Get
-                Return InnerPosition
+                Return _bounds
             End Get
-            Set(value As Point?)
-                If value IsNot Nothing Then
+            Set(value As Rectangle?)
+                If value IsNot Nothing AndAlso CurrentRegion IsNot Nothing Then
                     For Each entity In CurrentRegion.Entities
-                        If Me IsNot entity AndAlso entity.Contains(value.GetValueOrDefault()) Then Return
+                        If Me IsNot entity AndAlso entity.CollidesWith(value.GetValueOrDefault()) Then Return
                     Next
                 End If
-                RedrawAt(value)
-                InnerPosition = value
+                RedrawAt(New Delta(Of Rectangle?)(_bounds, value))
+                _bounds = value
             End Set
         End Property
-        Protected MustOverride Sub RedrawAt(newPosition As Point?)
+        Public Property Position As Point?
+            Get
+                Return Bounds?.TopLeft
+            End Get
+            Set(value As Point?)
+                Bounds = IfHasValue(value, AddressOf BoundsForNewPoint)
+            End Set
+        End Property
+        Protected MustOverride Function BoundsForNewPoint(point As Point) As Rectangle?
         Public Sub GoUp()
             IfHasValue(Position, Sub(point) Position = New Point(point.Left, Math.Max(point.Top - 1, 0)))
         End Sub
@@ -141,27 +174,26 @@ Module SunnysBigAdventure
             MyBase.New(entities)
             _sprite = sprite
         End Sub
-        Protected Overrides Property InnerPosition As Point?
-        Dim _sprite As Sprite
-        Public Overrides Function Contains(point As Point) As Boolean
-            Return IfHasValue(Position, Function(pos) New Rectangle(point, 1, 1).SafeContains(point), False)
+        Protected Overrides Function BoundsForNewPoint(point As Point) As Rectangle?
+            Return New Rectangle(point, 1, 1)
         End Function
-        Protected Overrides Sub RedrawAt(newPosition As Point?)
-            RedrawAt(newPosition, _sprite)
-        End Sub
-        Protected Overloads Sub RedrawAt(newPosition As Point?, newSprite As Sprite)
-            WriteAt(Position, Empty_)
-            WriteAt(newPosition, newSprite)
-        End Sub
+        Dim _sprite As Sprite
         Public Property Sprite As Sprite
             Get
                 Return _sprite
             End Get
             Set(value As Sprite)
-                RedrawAt(Position, value)
+                RedrawAt(New Delta(Of Rectangle?)(Bounds), New Delta(Of Sprite)(_sprite, value))
                 _sprite = value
             End Set
         End Property
+        Protected Overrides Sub RedrawAt(bounds As Delta(Of Rectangle?))
+            RedrawAt(bounds, New Delta(Of Sprite)(_sprite))
+        End Sub
+        Protected Overloads Sub RedrawAt(bounds As Delta(Of Rectangle?), sprite As Delta(Of Sprite))
+            If bounds.Changed Then WriteAt(bounds.OldValue?.TopLeft, Empty_)
+            WriteAt(bounds.NewValue?.TopLeft, sprite.NewValue)
+        End Sub
     End Class
     Class RectangleEntity
         Inherits Entity
@@ -169,57 +201,48 @@ Module SunnysBigAdventure
             MyBase.New(entities)
             Rectangle = rect
         End Sub
-        Dim _rectangle As Rectangle?
+        Protected Overrides Function BoundsForNewPoint(point As Point) As Rectangle?
+            Return IfHasValue(Bounds, Function(rect) New Rectangle(point, rect.Width, rect.Height))
+        End Function
         Public Property Rectangle As Rectangle?
             Get
-                Return _rectangle
+                Return Bounds
             End Get
             Set(value As Rectangle?)
-                RedrawAt(value)
-                _rectangle = value
+                Bounds = value
             End Set
         End Property
-        Public Overrides Function Contains(point As Point) As Boolean
-            Return IfHasValue(Rectangle, Function(rect) rect.SafeContains(point), False)
-        End Function
-        Protected Overrides Property InnerPosition As Point?
-            Get
-                Return Rectangle?.TopLeft
-            End Get
-            Set(value As Point?)
-                Rectangle = IfHasValue(value, Function(point) IfHasValue(Rectangle,
-                        Function(rect) New Rectangle(point, rect.Width, rect.Height),
-                        New Rectangle(point, 1, 1)), New Rectangle?())
-            End Set
-        End Property
-        Protected Overrides Sub RedrawAt(newPosition As Point?)
-        End Sub
-        Overloads Sub RedrawAt(newRect As Rectangle?)
-            Draw(Rectangle, Empty, Empty, Empty, Empty, Empty, Empty)
-            Draw(newRect, "━"c, "┃"c, "┏"c, "┓"c, "┗"c, "┛"c)
-        End Sub
-        Sub Draw(rectangle As Rectangle?, horizontal As Char, vertical As Char, topLeft As Char, topRight As Char, bottomLeft As Char, bottomRight As Char)
-            IfHasValue(rectangle,
-                       Sub(rect)
-                           CursorPosition = rect.TopLeft
-                           Write(topLeft)
-                           For i = 1 To rect.Width - 2
-                               Write(horizontal)
-                           Next
-                           Write(topRight)
-                           For y = 1 To rect.Height - 2
-                               SetCursorPosition(rect.Left, y)
-                               Write(vertical)
-                               SetCursorPosition(rect.Right, y)
-                               Write(vertical)
-                           Next
-                           SetCursorPosition(rect.Left, rect.Bottom)
-                           Write(bottomLeft)
-                           For i = 1 To rect.Width - 2
-                               Write(bottomRight)
-                           Next
-                           Write(bottomRight)
-                       End Sub)
+        Protected Overrides Sub RedrawAt(bounds As Delta(Of Rectangle?))
+            If bounds.Changed Then
+                Dim Draw =
+                    Sub(Rectangle As Rectangle?, horizontal As Char, vertical As Char,
+                        topLeft As Char, topRight As Char, bottomLeft As Char, bottomRight As Char)
+                        IfHasValue(Rectangle,
+                            Sub(rect)
+                                ResetColor()
+                                CursorPosition = rect.TopLeft
+                                Write(topLeft)
+                                For x = rect.Left + 1 To rect.Right - 1
+                                    Write(horizontal)
+                                Next
+                                Write(topRight)
+                                For y = rect.Top + 1 To rect.Bottom - 1
+                                    SetCursorPosition(rect.Left, y)
+                                    Write(vertical)
+                                    SetCursorPosition(rect.Right, y)
+                                    Write(vertical)
+                                Next
+                                SetCursorPosition(rect.Left, rect.Bottom)
+                                Write(bottomLeft)
+                                For x = rect.Left + 1 To rect.Right - 1
+                                    Write(horizontal)
+                                Next
+                                Write(bottomRight)
+                            End Sub)
+                    End Sub
+                Draw(bounds.OldValue, Empty, Empty, Empty, Empty, Empty, Empty)
+                Draw(bounds.NewValue, "━"c, "┃"c, "┏"c, "┓"c, "┗"c, "┛"c)
+            End If
         End Sub
     End Class
     Class TextEntity
@@ -228,40 +251,39 @@ Module SunnysBigAdventure
             MyBase.New(entities)
             Me.Text = text
         End Sub
-        Protected Overrides Property InnerPosition As Point?
+        Protected Overrides Function BoundsForNewPoint(point As Point) As Rectangle?
+            Return New Rectangle(point, Text.Length, 1)
+        End Function
         Dim _text As String
         Public Property Text As String
             Get
                 Return _text
             End Get
             Set(value As String)
-                RedrawAt(Position, value)
+                RedrawAt(New Delta(Of Rectangle?)(Bounds), New Delta(Of String)(_text, value))
                 _text = value
             End Set
         End Property
-        Public Overrides Function Contains(point As Point) As Boolean
-            Return IfHasValue(Position, Function(pos) New Rectangle(pos, Text.Length, 1).SafeContains(point), False)
-        End Function
-        Protected Overrides Sub RedrawAt(newPosition As Point?)
-            RedrawAt(newPosition, Text)
+        Protected Overrides Sub RedrawAt(bounds As Delta(Of Rectangle?))
+            RedrawAt(bounds, New Delta(Of String)(_text))
         End Sub
-        Protected Overloads Sub RedrawAt(newPosition As Point?, newText As String)
-            IfHasValue(Position, Sub(point)
-                                     ResetColor()
-                                     CursorPosition = point
-                                     For i = 1 To Text.Length
-                                         Write(Empty)
-                                     Next
-                                 End Sub)
-            IfHasValue(newPosition, Sub(point)
-                                        ResetColor()
-                                        CursorPosition = point
-                                        Write(newText)
-                                    End Sub)
+        Protected Overloads Sub RedrawAt(bounds As Delta(Of Rectangle?), text As Delta(Of String))
+            If bounds.Changed Then IfHasValue(bounds.OldValue, Sub(point)
+                                                                   ResetColor()
+                                                                   CursorPosition = point.TopLeft
+                                                                   For i = 1 To text.OldValue.Length
+                                                                       Write(Empty)
+                                                                   Next
+                                                               End Sub)
+            IfHasValue(bounds.NewValue, Sub(point)
+                                            ResetColor()
+                                            CursorPosition = point.TopLeft
+                                            Write(text.NewValue)
+                                        End Sub)
         End Sub
     End Class
 #End Region
-#Region "Entities"
+#Region "Global Entities"
     'Unicode: 
     '1.1☺☹☠❣❤✌☝✍♨✈⌛⌚☀☁☂❄☃☄♠♥♦♣♟☎⌨✉✏✒✂☢☣↗➡↘↙↖↕↔↩↪✡☸☯✝☦☪☮♈♉♊♋♌♍♎♏♐♑♒♓▶◀♀♂☑✔✖✳✴❇‼〰©®™Ⓜ
     '1.1㊗㊙▪▫☜♅♪♜☌♘☛♞☵☒♛♢✎‍♡☼☴♆☲☇♇☏☨☧☤☥♭☭☽☾❥☍☋☊☬♧☉#☞☶♁♤☷✐♮♖★♝*☰☫♫♙♃☚♬☩♄☓♯☟☈☻☱♕☳♔♩♚♗☡☐
@@ -319,6 +341,7 @@ Module SunnysBigAdventure
 
         End Sub
         Public ReadOnly Rect As New RectangleEntity(WriteEntities, New Rectangle(0, 0, 2, 2))
+        Public ReadOnly Rect2 As New RectangleEntity(WriteEntities, New Rectangle(4, 4, 6, 6))
         Public ReadOnly SBA As New TextEntity(WriteEntities, "SBA")
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Nothing
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region1()
