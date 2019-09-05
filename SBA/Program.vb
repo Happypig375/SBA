@@ -4,7 +4,7 @@ Imports Unicode = System.Text.UnicodeEncoding
 Imports SBA
 
 Module SunnysBigAdventure
-#Region "Foundation"
+#Region "Structures"
     Structure Point
         Public Sub New(left As Integer, top As Integer)
             Me.Left = left
@@ -67,6 +67,8 @@ Module SunnysBigAdventure
         Public ReadOnly Property Display As Char
         Public ReadOnly Property Color As ConsoleColor
     End Structure
+#End Region
+#Region "Helpers"
     Property CursorPosition As Point
         Get
             Return New Point(CursorLeft, CursorTop)
@@ -97,10 +99,10 @@ Module SunnysBigAdventure
             Write(sprite.Display)
         End If
     End Sub
+#End Region
+#Region "Entity Classes"
     MustInherit Class Entity
-        ReadOnly Entities As ICollection(Of Entity)
         Sub New(entities As ICollection(Of Entity))
-            Me.Entities = entities
             entities.Add(Me)
         End Sub
         MustOverride Function Contains(point As Point) As Boolean
@@ -111,7 +113,7 @@ Module SunnysBigAdventure
             End Get
             Set(value As Point?)
                 If value IsNot Nothing Then
-                    For Each entity In Entities
+                    For Each entity In CurrentRegion.Entities
                         If Me IsNot entity AndAlso entity.Contains(value.GetValueOrDefault()) Then Return
                     Next
                 End If
@@ -163,8 +165,9 @@ Module SunnysBigAdventure
     End Class
     Class RectangleEntity
         Inherits Entity
-        Public Sub New(entities As ICollection(Of Entity))
+        Public Sub New(entities As ICollection(Of Entity), rect As Rectangle)
             MyBase.New(entities)
+            Rectangle = rect
         End Sub
         Dim _rectangle As Rectangle?
         Public Property Rectangle As Rectangle?
@@ -257,28 +260,6 @@ Module SunnysBigAdventure
                                     End Sub)
         End Sub
     End Class
-    Class Region
-        Dim Left As Region
-        Dim Right As Region
-
-        Dim Entities As New List(Of Entity)
-        Public ReadOnly Sunny_ As New Sprite("☺"c)
-        Public ReadOnly Sunny_Angry As New Sprite("☹"c, ConsoleColor.Red)
-        Public ReadOnly Sunny As New SpriteEntity(Entities, Sunny_)
-
-        Public ReadOnly Sun_ As New Sprite("☼"c, ConsoleColor.Yellow)
-        Public ReadOnly Sun As New SpriteEntity(Entities, Sun_)
-
-        Public ReadOnly Horsey_ As New Sprite("♘"c, ConsoleColor.Magenta)
-        Public ReadOnly Horsey_Dead As New Sprite("♞"c, ConsoleColor.DarkMagenta)
-        Public ReadOnly Horsey As New SpriteEntity(Entities, Horsey_)
-
-        Public ReadOnly Rect As New RectangleEntity(Entities)
-
-        Public ReadOnly SBA As New TextEntity(Entities, "")
-
-        Public ActiveEntity As SpriteEntity = Sunny
-    End Class
 #End Region
 #Region "Entities"
     'Unicode: 
@@ -296,10 +277,52 @@ Module SunnysBigAdventure
     '10.₿
     Const Empty = " "c
     ReadOnly Empty_ As New Sprite(Empty)
+    ReadOnly GlobalEntities As New List(Of Entity)
+    Public ReadOnly Sunny_ As New Sprite("☺"c)
+    Public ReadOnly Sunny_Angry As New Sprite("☹"c, ConsoleColor.Red)
+    Public ReadOnly Sunny As New SpriteEntity(GlobalEntities, Sunny_)
 
+    Public ReadOnly Sun_ As New Sprite("☼"c, ConsoleColor.Yellow)
+    Public ReadOnly Sun As New SpriteEntity(GlobalEntities, Sun_)
+
+    Public ReadOnly Horsey_ As New Sprite("♘"c, ConsoleColor.Magenta)
+    Public ReadOnly Horsey_Dead As New Sprite("♞"c, ConsoleColor.DarkMagenta)
+    Public ReadOnly Horsey As New SpriteEntity(GlobalEntities, Horsey_)
+
+    Public ActiveEntity As SpriteEntity = Sunny
 #End Region
 #Region "Regions"
-    Dim CurrentRegion As Region = New Region()
+    Dim CurrentRegion As Region = New Region1()
+    MustInherit Class Region
+        Sub Go(region As Func(Of Region))
+            If region IsNot Nothing Then
+                For Each entity In WriteEntities
+                    entity.Position = Nothing
+                Next
+                CurrentRegion = region()
+            End If
+        End Sub
+        Public Sub GoLeft()
+            Go(Left)
+        End Sub
+        Public Sub GoRight()
+            Go(Right)
+        End Sub
+        Protected MustOverride ReadOnly Property Left As Func(Of Region)
+        Protected MustOverride ReadOnly Property Right As Func(Of Region)
+        Protected ReadOnly WriteEntities As New List(Of Entity)(GlobalEntities)
+        Public ReadOnly Entities As New ReadOnlyCollection(Of Entity)(WriteEntities)
+    End Class
+    Class Region1
+        Inherits Region
+        Sub New()
+
+        End Sub
+        Public ReadOnly Rect As New RectangleEntity(WriteEntities, New Rectangle(0, 0, 2, 2))
+        Public ReadOnly SBA As New TextEntity(WriteEntities, "SBA")
+        Protected Overrides ReadOnly Property Left As Func(Of Region) = Nothing
+        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region1()
+    End Class
 #End Region
     Sub Main()
         If LargestWindowWidth < 48 Or LargestWindowHeight < 10 Then
@@ -310,16 +333,16 @@ Module SunnysBigAdventure
         WindowWidth = 48
         WindowHeight = 10
         CursorVisible = False
-        CurrentRegion.Sunny.Position = New Point(3, 3)
-        CurrentRegion.Sun.Position = New Point(3, 6)
-        CurrentRegion.Horsey.Position = New Point(3, 8)
+        Sunny.Position = New Point(3, 3)
+        Sun.Position = New Point(3, 6)
+        Horsey.Position = New Point(3, 8)
         While True
             Dim key = ReadKey(TimeSpan.FromSeconds(1))
             Select Case key
-                Case ConsoleKey.LeftArrow : CurrentRegion.ActiveEntity.GoLeft()
-                Case ConsoleKey.RightArrow : CurrentRegion.ActiveEntity.GoRight()
-                Case ConsoleKey.UpArrow : CurrentRegion.ActiveEntity.GoUp()
-                Case ConsoleKey.DownArrow : CurrentRegion.ActiveEntity.GoDown()
+                Case ConsoleKey.LeftArrow : ActiveEntity.GoLeft()
+                Case ConsoleKey.RightArrow : ActiveEntity.GoRight()
+                Case ConsoleKey.UpArrow : ActiveEntity.GoUp()
+                Case ConsoleKey.DownArrow : ActiveEntity.GoDown()
                 Case Else
             End Select
             Debug.WriteLine(key)
