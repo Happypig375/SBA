@@ -1,8 +1,6 @@
 ﻿Imports System.Console
 Imports System.Collections.ObjectModel
 Imports Unicode = System.Text.UnicodeEncoding
-Imports SBA
-
 Module SunnysBigAdventure
 #Region "Structures"
     Structure Delta(Of T)
@@ -32,8 +30,8 @@ Module SunnysBigAdventure
         End Function
     End Structure
     Structure Rectangle
-        Public Sub New(top As Integer, left As Integer, width As Integer, height As Integer)
-            Me.New(New Point(top, left), width, height)
+        Public Sub New(left As Integer, top As Integer, width As Integer, height As Integer)
+            Me.New(New Point(left, top), width, height)
         End Sub
         Public Sub New(topLeft As Point, bottomRight As Point)
             Me.New(topLeft, bottomRight.Left - topLeft.Left + 1, bottomRight.Top - topLeft.Top + 1)
@@ -122,9 +120,20 @@ Module SunnysBigAdventure
 #End Region
 #Region "Entity Classes"
     MustInherit Class Entity
+        Implements IDisposable
         Sub New(entities As ICollection(Of Entity))
             entities.Add(Me)
         End Sub
+        Protected Function CanMoveTo(value As Rectangle?) As Boolean
+            If value IsNot Nothing AndAlso CurrentRegion IsNot Nothing Then
+                Dim rect = value.GetValueOrDefault()
+                For Each entity In CurrentRegion.Entities
+                    If Me IsNot entity AndAlso entity.Bounds?.SafeCollidesWith(rect) Then Return False
+                Next
+                If rect.Left < 0 OrElse rect.Right >= WindowWidth OrElse rect.Top < 0 OrElse rect.Bottom >= WindowHeight Then Return False
+            End If
+            Return True
+        End Function
         Protected MustOverride Sub RedrawAt(bounds As Delta(Of Rectangle?))
         Dim _bounds As Rectangle?
         Protected Property Bounds As Rectangle?
@@ -132,11 +141,7 @@ Module SunnysBigAdventure
                 Return _bounds
             End Get
             Set(value As Rectangle?)
-                If value IsNot Nothing AndAlso CurrentRegion IsNot Nothing Then
-                    For Each entity In CurrentRegion.Entities
-                        If Me IsNot entity AndAlso entity.Bounds?.SafeCollidesWith(value.GetValueOrDefault()) Then Return
-                    Next
-                End If
+                If Not CanMoveTo(value) Then Return
                 RedrawAt(New Delta(Of Rectangle?)(_bounds, value))
                 _bounds = value
             End Set
@@ -150,44 +155,27 @@ Module SunnysBigAdventure
             End Set
         End Property
         Protected MustOverride Function BoundsForNewPoint(point As Point) As Rectangle?
-        Public Sub GoUp()
-            IfHasValue(Position, Sub(point) Position = New Point(point.Left, Math.Max(point.Top - 1, 0)))
-        End Sub
-        Public Sub GoDown()
-            IfHasValue(Position, Sub(point) Position = New Point(point.Left, Math.Min(BufferHeight, point.Top + 1)))
-        End Sub
-        Public Sub GoLeft()
-            IfHasValue(Position, Sub(point) Position = New Point(Math.Max(point.Left - 1, 0), point.Top))
-        End Sub
-        Public Sub GoRight()
-            IfHasValue(Position, Sub(point) Position = New Point(Math.Min(point.Left + 1, BufferWidth), point.Top))
-        End Sub
-    End Class
-    Class SpriteEntity
-        Inherits Entity
-        Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
-            MyBase.New(entities)
-            _sprite = sprite
-        End Sub
-        Protected Overrides Function BoundsForNewPoint(point As Point) As Rectangle?
-            Return New Rectangle(point, 1, 1)
+        ''' <returns>Whether the point was different from original.</returns>
+        Function Go(pointMap As Func(Of Point, Point)) As Boolean
+            Return IfHasValue(Position, Function(point)
+                                            Position = pointMap(point)
+                                            Return Not point.Equals(Position)
+                                        End Function, False)
         End Function
-        Dim _sprite As Sprite
-        Public Property Sprite As Sprite
-            Get
-                Return _sprite
-            End Get
-            Set(value As Sprite)
-                RedrawAt(New Delta(Of Rectangle?)(Bounds), New Delta(Of Sprite)(_sprite, value))
-                _sprite = value
-            End Set
-        End Property
-        Protected Overrides Sub RedrawAt(bounds As Delta(Of Rectangle?))
-            RedrawAt(bounds, New Delta(Of Sprite)(_sprite))
-        End Sub
-        Protected Overloads Sub RedrawAt(bounds As Delta(Of Rectangle?), sprite As Delta(Of Sprite))
-            If bounds.Changed Then WriteAt(bounds.OldValue?.TopLeft, Empty_)
-            WriteAt(bounds.NewValue?.TopLeft, sprite.NewValue)
+        Public Overridable Function GoUp() As Boolean
+            Return Go(Function(point) New Point(point.Left, Math.Max(point.Top - 1, 0)))
+        End Function
+        Public Overridable Function GoDown() As Boolean
+            Return Go(Function(point) New Point(point.Left, Math.Min(WindowHeight - 1, point.Top + 1)))
+        End Function
+        Public Overridable Function GoLeft() As Boolean
+            Return Go(Function(point) New Point(Math.Max(point.Left - 1, 0), point.Top))
+        End Function
+        Public Overridable Function GoRight() As Boolean
+            Return Go(Function(point) New Point(Math.Min(point.Left + 1, WindowWidth - 2), point.Top)) ' Sunny is too fat and spans 2 spaces
+        End Function
+        Public Overridable Sub Dispose() Implements IDisposable.Dispose
+            Position = Nothing
         End Sub
     End Class
     Class RectangleEntity
@@ -215,24 +203,24 @@ Module SunnysBigAdventure
                         IfHasValue(Rectangle,
                             Sub(rect)
                                 ResetColor()
-                                CursorPosition = rect.TopLeft
-                                Write(topLeft)
-                                For x = rect.Left + 1 To rect.Right - 1
-                                    Write(horizontal)
-                                Next
-                                Write(topRight)
-                                For y = rect.Top + 1 To rect.Bottom - 1
-                                    SetCursorPosition(rect.Left, y)
-                                    Write(vertical)
-                                    SetCursorPosition(rect.Right, y)
-                                    Write(vertical)
-                                Next
                                 SetCursorPosition(rect.Left, rect.Bottom)
                                 Write(bottomLeft)
                                 For x = rect.Left + 1 To rect.Right - 1
                                     Write(horizontal)
                                 Next
                                 Write(bottomRight)
+                                For y = rect.Top + 1 To rect.Bottom - 1
+                                    SetCursorPosition(rect.Left, y)
+                                    Write(vertical)
+                                    SetCursorPosition(rect.Right, y)
+                                    Write(vertical)
+                                Next
+                                CursorPosition = rect.TopLeft
+                                Write(topLeft)
+                                For x = rect.Left + 1 To rect.Right - 1
+                                    Write(horizontal)
+                                Next
+                                Write(topRight)
                             End Sub)
                     End Sub
                 Draw(bounds.OldValue, Empty, Empty, Empty, Empty, Empty, Empty)
@@ -278,6 +266,84 @@ Module SunnysBigAdventure
                                         End Sub)
         End Sub
     End Class
+    Class SpriteEntity
+        Inherits Entity
+        Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
+            MyBase.New(entities)
+            _sprite = sprite
+        End Sub
+        Protected Overrides Function BoundsForNewPoint(point As Point) As Rectangle?
+            Return New Rectangle(point, 1, 1)
+        End Function
+        Dim _sprite As Sprite
+        Public Property Sprite As Sprite
+            Get
+                Return _sprite
+            End Get
+            Set(value As Sprite)
+                RedrawAt(New Delta(Of Rectangle?)(Bounds), New Delta(Of Sprite)(_sprite, value))
+                _sprite = value
+            End Set
+        End Property
+        Protected Overrides Sub RedrawAt(bounds As Delta(Of Rectangle?))
+            RedrawAt(bounds, New Delta(Of Sprite)(_sprite))
+        End Sub
+        Protected Overloads Sub RedrawAt(bounds As Delta(Of Rectangle?), sprite As Delta(Of Sprite))
+            If bounds.Changed Then WriteAt(bounds.OldValue?.TopLeft, Empty_)
+            WriteAt(bounds.NewValue?.TopLeft, sprite.NewValue)
+        End Sub
+    End Class
+    Class GravityEntity
+        Inherits SpriteEntity
+        Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
+            MyBase.New(entities, sprite)
+            AddHandler Tick, AddressOf WhenTick
+        End Sub
+        Public Property VerticalVelocity As Integer
+        Sub WhenTick()
+            If VerticalVelocity > 0 Then
+                MyBase.GoUp()
+                VerticalVelocity -= 1
+            ElseIf MyBase.GoDown() Then
+                VerticalVelocity -= 1
+            Else
+                VerticalVelocity = 0
+            End If
+        End Sub
+        Public Overrides Function GoUp() As Boolean
+            If MyBase.GoDown() Then
+                Return False ' Can't jump while falling
+            Else
+                MyBase.GoUp()
+                VerticalVelocity = 2
+                Return True
+            End If
+        End Function
+        Public Overrides Sub Dispose()
+            RemoveHandler Tick, AddressOf WhenTick
+            MyBase.Dispose()
+        End Sub
+    End Class
+    Class PlayerEntity
+        Inherits GravityEntity
+        Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
+            MyBase.New(entities, sprite)
+        End Sub
+        Public Overrides Function GoLeft() As Boolean
+            Dim ret = MyBase.GoLeft()
+            If Position?.Left = 0 AndAlso CurrentRegion.GoLeft() Then
+                Position = New Point(WindowWidth - 3, Position.GetValueOrDefault().Top)
+            End If
+            Return ret
+        End Function
+        Public Overrides Function GoRight() As Boolean
+            Dim ret = MyBase.GoRight()
+            If Position?.Left = WindowWidth - 2 AndAlso CurrentRegion.GoRight() Then
+                Position = New Point(1, Position.GetValueOrDefault().Top)
+            End If
+            Return ret
+        End Function
+    End Class
 #End Region
 #Region "Global Entities"
     'Unicode: 
@@ -298,7 +364,7 @@ Module SunnysBigAdventure
     ReadOnly GlobalEntities As New List(Of Entity)
     Public ReadOnly Sunny_ As New Sprite("☺"c)
     Public ReadOnly Sunny_Angry As New Sprite("☹"c, ConsoleColor.Red)
-    Public ReadOnly Sunny As New SpriteEntity(GlobalEntities, Sunny_)
+    Public ReadOnly Sunny As New PlayerEntity(GlobalEntities, Sunny_)
 
     Public ReadOnly Sun_ As New Sprite("☼"c, ConsoleColor.Yellow)
     Public ReadOnly Sun As New SpriteEntity(GlobalEntities, Sun_)
@@ -307,56 +373,71 @@ Module SunnysBigAdventure
     Public ReadOnly Horsey_Dead As New Sprite("♞"c, ConsoleColor.DarkMagenta)
     Public ReadOnly Horsey As New SpriteEntity(GlobalEntities, Horsey_)
 
-    Public ActiveEntity As SpriteEntity = Sunny
+    Public ActiveEntity As PlayerEntity = Sunny
 #End Region
 #Region "Regions"
-    Dim CurrentRegion As Region = New Region1()
+    Dim CurrentRegion As Region
     MustInherit Class Region
-        Sub Go(region As Func(Of Region))
+        Implements IDisposable
+        ''' <returns>Whether region was changed.</returns>
+        Function Go(region As Func(Of Region)) As Boolean
             If region IsNot Nothing Then
-                For Each entity In WriteEntities
-                    entity.Position = Nothing
-                Next
+                CurrentRegion.Dispose()
                 CurrentRegion = region()
+                Return True
             End If
-        End Sub
-        Public Sub GoLeft()
-            Go(Left)
-        End Sub
-        Public Sub GoRight()
-            Go(Right)
-        End Sub
+            Return False
+        End Function
+        Public Function GoLeft() As Boolean
+            Return Go(Left)
+        End Function
+        Public Function GoRight() As Boolean
+            Return Go(Right)
+        End Function
         Protected MustOverride ReadOnly Property Left As Func(Of Region)
         Protected MustOverride ReadOnly Property Right As Func(Of Region)
         Protected ReadOnly WriteEntities As New List(Of Entity)(GlobalEntities)
         Public ReadOnly Entities As New ReadOnlyCollection(Of Entity)(WriteEntities)
+        Public Sub Dispose() Implements IDisposable.Dispose
+            For Each entity In Entities.Except(GlobalEntities)
+                entity.Dispose()
+            Next
+        End Sub
     End Class
-    Class Region1
+    Class Region1_Title
         Inherits Region
         Sub New()
-
+            Sunny.Position = New Point(3, 5)
         End Sub
-        Public ReadOnly Rect As New RectangleEntity(WriteEntities, New Rectangle(0, 0, 2, 2))
-        Public ReadOnly Rect2 As New RectangleEntity(WriteEntities, New Rectangle(20, 6, 6, 6))
-        Public ReadOnly SBA As New TextEntity(WriteEntities, "SBA", New Point(3, 3))
+        Public ReadOnly Rect As New RectangleEntity(WriteEntities, New Rectangle(0, 9, WindowWidth, 1))
+        Public ReadOnly SBA As New TextEntity(WriteEntities, "SBA: Sunny's Big Adventure", New Point(10, 0))
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Nothing
-        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region1()
+        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region2()
+    End Class
+    Class Region2
+        Inherits Region
+        Public ReadOnly Rect As New RectangleEntity(WriteEntities, New Rectangle(0, 9, WindowWidth, 1))
+        Public ReadOnly SBA As New TextEntity(WriteEntities, "Region 2", New Point(0, 0))
+        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region1_Title()
+        Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
     End Class
 #End Region
+    Const WindowWidth = 48
+    Const WindowHeight = 10
+    Public Event Tick()
     Sub Main()
         If LargestWindowWidth < 48 Or LargestWindowHeight < 10 Then
             WriteLine("ERROR: Please decrease font size")
             Return
         End If
         OutputEncoding = New Unicode()
-        WindowWidth = 48
-        WindowHeight = 10
+        Console.WindowWidth = WindowWidth
+        Console.WindowHeight = WindowHeight
         CursorVisible = False
-        Sunny.Position = New Point(3, 9)
-        Sun.Position = New Point(3, 6)
-        Horsey.Position = New Point(3, 8)
+        CurrentRegion = New Region1_Title()
         While True
-            Dim key = ReadKey(TimeSpan.FromSeconds(1))
+            RaiseEvent Tick()
+            Dim key = ReadKey(TimeSpan.FromSeconds(0.2))
             Select Case key
                 Case ConsoleKey.LeftArrow : ActiveEntity.GoLeft()
                 Case ConsoleKey.RightArrow : ActiveEntity.GoRight()
@@ -364,7 +445,6 @@ Module SunnysBigAdventure
                 Case ConsoleKey.DownArrow : ActiveEntity.GoDown()
                 Case Else
             End Select
-            Debug.WriteLine(key)
         End While
     End Sub
 End Module
