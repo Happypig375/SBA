@@ -67,9 +67,7 @@ Module SunnysBigAdventure
             End Get
         End Property
         Function CollidesWith(other As Rectangle) As Boolean
-            Dim NextTo = Function(obj As Integer, border As Integer) border - 1 <= obj AndAlso obj <= border + 1
-            Return (NextTo(other.Left, Left) OrElse NextTo(other.Right, Right)) AndAlso
-                   ((other.Top = Top) OrElse (other.Bottom = Bottom))
+            Return Left <= other.Right AndAlso other.Left <= Right AndAlso Top <= other.Bottom AndAlso other.Top <= Bottom
         End Function
         Public Overrides Function ToString() As String
             Return $"({Left}, {Top}) to ({Right}, {Bottom})"
@@ -341,7 +339,7 @@ Module SunnysBigAdventure
 
         End Sub
         Public ReadOnly Rect As New RectangleEntity(WriteEntities, New Rectangle(0, 0, 2, 2))
-        Public ReadOnly Rect2 As New RectangleEntity(WriteEntities, New Rectangle(4, 4, 6, 6))
+        Public ReadOnly Rect2 As New RectangleEntity(WriteEntities, New Rectangle(20, 6, 6, 6))
         Public ReadOnly SBA As New TextEntity(WriteEntities, "SBA")
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Nothing
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region1()
