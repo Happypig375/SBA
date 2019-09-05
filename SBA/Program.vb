@@ -376,14 +376,24 @@ Module SunnysBigAdventure
     Public ActiveEntity As PlayerEntity = Sunny
 #End Region
 #Region "Regions"
-    Dim CurrentRegion As Region
+    Dim _currentRegion As Region = New Region1_Title()
+    Public ReadOnly Property CurrentRegion As Region
+        Get
+            Return _currentRegion
+        End Get
+    End Property
+    Public WriteOnly Property SetCurrentRegion As Func(Of Region) ' **Prevent collision detection between old and new region entities**
+        Set(value As Func(Of Region))
+            _currentRegion.Dispose()
+            _currentRegion = value()
+        End Set
+    End Property
     MustInherit Class Region
         Implements IDisposable
         ''' <returns>Whether region was changed.</returns>
         Function Go(region As Func(Of Region)) As Boolean
             If region IsNot Nothing Then
-                CurrentRegion.Dispose()
-                CurrentRegion = region()
+                SetCurrentRegion = region
                 Return True
             End If
             Return False
@@ -409,15 +419,15 @@ Module SunnysBigAdventure
         Sub New()
             Sunny.Position = New Point(3, 5)
         End Sub
-        Public ReadOnly Rect As New RectangleEntity(WriteEntities, New Rectangle(0, 9, WindowWidth, 1))
+        Public ReadOnly Bedrock As New RectangleEntity(WriteEntities, New Rectangle(0, 9, WindowWidth, 1))
         Public ReadOnly SBA As New TextEntity(WriteEntities, "SBA: Sunny's Big Adventure", New Point(10, 0))
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Nothing
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region2()
     End Class
     Class Region2
         Inherits Region
-        Public ReadOnly Rect As New RectangleEntity(WriteEntities, New Rectangle(0, 9, WindowWidth, 1))
-        Public ReadOnly SBA As New TextEntity(WriteEntities, "Region 2", New Point(0, 0))
+        Public ReadOnly Bedrock As New RectangleEntity(WriteEntities, New Rectangle(0, 9, WindowWidth, 1))
+        Public ReadOnly SBA As New TextEntity(WriteEntities, "Region 222222222222222222222222", New Point(0, 0))
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region1_Title()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
     End Class
@@ -434,7 +444,6 @@ Module SunnysBigAdventure
         Console.WindowWidth = WindowWidth
         Console.WindowHeight = WindowHeight
         CursorVisible = False
-        CurrentRegion = New Region1_Title()
         While True
             RaiseEvent Tick()
             Dim key = ReadKey(TimeSpan.FromSeconds(0.2))
