@@ -242,9 +242,10 @@ Module SunnysBigAdventure
     End Class
     Class TextEntity
         Inherits Entity
-        Public Sub New(entities As ICollection(Of Entity), text As String)
+        Public Sub New(entities As ICollection(Of Entity), text As String, position As Point)
             MyBase.New(entities)
             Me.Text = text
+            Me.Position = position
         End Sub
         Protected Overrides Function BoundsForNewPoint(point As Point) As Rectangle?
             Return New Rectangle(point, Text.Length, 1)
@@ -337,7 +338,7 @@ Module SunnysBigAdventure
         End Sub
         Public ReadOnly Rect As New RectangleEntity(WriteEntities, New Rectangle(0, 0, 2, 2))
         Public ReadOnly Rect2 As New RectangleEntity(WriteEntities, New Rectangle(20, 6, 6, 6))
-        Public ReadOnly SBA As New TextEntity(WriteEntities, "SBA")
+        Public ReadOnly SBA As New TextEntity(WriteEntities, "SBA", New Point(3, 3))
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Nothing
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region1()
     End Class
@@ -351,7 +352,7 @@ Module SunnysBigAdventure
         WindowWidth = 48
         WindowHeight = 10
         CursorVisible = False
-        Sunny.Position = New Point(3, 3)
+        Sunny.Position = New Point(3, 9)
         Sun.Position = New Point(3, 6)
         Horsey.Position = New Point(3, 8)
         While True
