@@ -66,8 +66,8 @@ Module SunnysBigAdventure
                 Return TopLeft.Top + Height - 1
             End Get
         End Property
-        Function CollidesWith(other As Rectangle) As Boolean
-            Return Left <= other.Right AndAlso other.Left <= Right AndAlso Top <= other.Bottom AndAlso other.Top <= Bottom
+        Function SafeCollidesWith(other As Rectangle) As Boolean
+            Return Left - 1 <= other.Right AndAlso other.Left - 1 <= Right AndAlso Top <= other.Bottom AndAlso other.Top <= Bottom
         End Function
         Public Overrides Function ToString() As String
             Return $"({Left}, {Top}) to ({Right}, {Bottom})"
@@ -126,9 +126,6 @@ Module SunnysBigAdventure
             entities.Add(Me)
         End Sub
         Protected MustOverride Sub RedrawAt(bounds As Delta(Of Rectangle?))
-        Public Function CollidesWith(bounds As Rectangle) As Boolean
-            Return IfHasValue(Me.Bounds, Function(box) box.CollidesWith(bounds), False)
-        End Function
         Dim _bounds As Rectangle?
         Protected Property Bounds As Rectangle?
             Get
@@ -137,7 +134,7 @@ Module SunnysBigAdventure
             Set(value As Rectangle?)
                 If value IsNot Nothing AndAlso CurrentRegion IsNot Nothing Then
                     For Each entity In CurrentRegion.Entities
-                        If Me IsNot entity AndAlso entity.CollidesWith(value.GetValueOrDefault()) Then Return
+                        If Me IsNot entity AndAlso entity.Bounds?.SafeCollidesWith(value.GetValueOrDefault()) Then Return
                     Next
                 End If
                 RedrawAt(New Delta(Of Rectangle?)(_bounds, value))
