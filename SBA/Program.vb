@@ -1,6 +1,6 @@
 ﻿Imports System.Console
 Imports System.Collections.ObjectModel
-Imports Unicode = System.Text.UnicodeEncoding
+Imports Encoding = System.Text.Encoding
 Imports SBA
 
 Module SunnysBigAdventure
@@ -66,6 +66,9 @@ Module SunnysBigAdventure
                 Return TopLeft.Top + Height - 1
             End Get
         End Property
+        Function PreciseCollidesWith(other As Rectangle) As Boolean
+            Return Left <= other.Right AndAlso other.Left <= Right AndAlso Top <= other.Bottom AndAlso other.Top <= Bottom
+        End Function
         Function SafeCollidesWith(other As Rectangle) As Boolean
             Return Left - 1 <= other.Right AndAlso other.Left - 1 <= Right AndAlso Top <= other.Bottom AndAlso other.Top <= Bottom
         End Function
@@ -126,15 +129,17 @@ Module SunnysBigAdventure
         Sub New(entities As ICollection(Of Entity))
             entities.Add(Me)
         End Sub
-        Protected Overridable Function BlockEntry(other As Entity, otherNewBounds As Rectangle) As Boolean
-            Return Bounds.HasValue AndAlso Bounds.GetValueOrDefault().SafeCollidesWith(otherNewBounds)
+        Protected Overridable Function ForbidEntry(other As Entity, otherBounds As Rectangle) As Boolean
+            Return TypeOf other IsNot TriggerZone AndAlso
+                   Bounds IsNot Nothing AndAlso
+                   Bounds.GetValueOrDefault().SafeCollidesWith(otherBounds)
         End Function
         Protected Function CanMoveTo(value As Rectangle?) As Boolean
             If value IsNot Nothing AndAlso CurrentRegion IsNot Nothing Then
                 Dim rect = value.GetValueOrDefault()
                 If rect.Left < 0 OrElse rect.Right >= WindowWidth OrElse rect.Top < 0 OrElse rect.Bottom >= WindowHeight Then Return False
                 For Each entity In CurrentRegion.Entities
-                    If Me IsNot entity AndAlso entity.BlockEntry(Me, rect) Then Return False
+                    If Me IsNot entity AndAlso entity.ForbidEntry(Me, rect) Then Return False
                 Next
             End If
             Return True
@@ -235,16 +240,37 @@ Module SunnysBigAdventure
     End Class
     Class TriggerZone
         Inherits RectangleEntity
-        Public Sub New(entities As ICollection(Of Entity), rect As Rectangle)
+        Public Sub New(entities As ICollection(Of Entity), rect As Rectangle,
+                       enter As Action, leave As Action, keyPress As Func(Of ConsoleKey, Boolean))
             MyBase.New(entities, rect)
+            Me.Enter = enter
+            Me.Leave = leave
+            Me.KeyPress = keyPress
         End Sub
-        Protected Overrides Function BlockEntry(other As Entity, otherNewBounds As Rectangle) As Boolean
+        Public Property Enter As Action
+        Public Property Leave As Action
+        ''' <returns>Whether the key has been handled.</returns>
+        Public Property KeyPress As Func(Of ConsoleKey, Boolean)
+        Protected Overrides Function ForbidEntry(other As Entity, otherNewBounds As Rectangle) As Boolean
+            If (TypeOf other Is PlayerEntity) Then
+                Dim player = DirectCast(other, PlayerEntity)
+                If Bounds?.PreciseCollidesWith(otherNewBounds) Then
+                    player.Trigger = Me
+                    Enter?.Invoke()
+                ElseIf player.Trigger Is Me Then
+                    player.Trigger = Nothing
+                    Leave?.Invoke()
+                End If
+            End If
             Return False
         End Function
-        Public Sub HandleKey(key As ConsoleKey)
-
+        Public Overrides Sub Dispose()
+            If ActiveEntity.Trigger Is Me Then
+                ActiveEntity.Trigger = Nothing
+                Leave?.Invoke()
+            End If
+            MyBase.Dispose()
         End Sub
-
         Protected Overrides Sub RedrawAt(bounds As Delta(Of Rectangle?)) ' Doesn't need to be drawn
         End Sub
     End Class
@@ -346,8 +372,20 @@ Module SunnysBigAdventure
     End Class
     Class PlayerEntity
         Inherits GravityEntity
+        Public Property Trigger As TriggerZone
         Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
             MyBase.New(entities, sprite)
+        End Sub
+        Public Sub HandleKey(key As ConsoleKey)
+            If Trigger Is Nothing OrElse Not Trigger.KeyPress(key) Then
+                Select Case key
+                    Case ConsoleKey.LeftArrow : GoLeft()
+                    Case ConsoleKey.RightArrow : GoRight()
+                    Case ConsoleKey.UpArrow : GoUp()
+                    Case ConsoleKey.DownArrow : GoDown()
+                    Case Else
+                End Select
+            End If
         End Sub
         Public Overrides Function GoLeft() As Boolean
             Dim ret = MyBase.GoLeft()
@@ -444,14 +482,23 @@ Module SunnysBigAdventure
         Sub New()
             Sunny.Position = New Point(3, 5)
         End Sub
-        Public ReadOnly SBA As New TextEntity(WriteEntities, "SBA: Sunny's Big Adventure", New Point(10, 0))
+        Protected ReadOnly SBA As New TextEntity(WriteEntities, "SBA: Sunny's Big Adventure", New Point(10, 0))
+        Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(0, 1, WindowWidth, 8),
+            Nothing, Sub() Sunny.Sprite = Sunny_, Function(key)
+                                                      Select Case key
+                                                          Case ConsoleKey.Q
+                                                              Sunny.Sprite = If(Sunny.Sprite.Equals(Sunny_), Sunny_Angry, Sunny_)
+                                                              Return True
+                                                          Case Else
+                                                              Return False
+                                                      End Select
+                                                  End Function)
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Nothing
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region2()
     End Class
     Class Region2
         Inherits Region
-        Public ReadOnly Bedrock As New RectangleEntity(WriteEntities, New Rectangle(0, 9, WindowWidth, 1))
-        Public ReadOnly SBA As New TextEntity(WriteEntities, "Region 2", New Point(15, 0))
+        Protected ReadOnly SBA As New TextEntity(WriteEntities, "Region 2", New Point(15, 0))
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region1_Title()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
     End Class
@@ -464,20 +511,14 @@ Module SunnysBigAdventure
             WriteLine("ERROR: Please decrease font size")
             Return
         End If
-        OutputEncoding = New Unicode()
+        OutputEncoding = Encoding.Unicode
         Console.WindowWidth = WindowWidth
         Console.WindowHeight = WindowHeight
         CursorVisible = False
         While True
             RaiseEvent Tick()
             Dim key = ReadKey(TimeSpan.FromSeconds(0.2))
-            Select Case key
-                Case ConsoleKey.LeftArrow : ActiveEntity.GoLeft()
-                Case ConsoleKey.RightArrow : ActiveEntity.GoRight()
-                Case ConsoleKey.UpArrow : ActiveEntity.GoUp()
-                Case ConsoleKey.DownArrow : ActiveEntity.GoDown()
-                Case Else
-            End Select
+            If key IsNot Nothing Then ActiveEntity.HandleKey(key.GetValueOrDefault())
         End While
     End Sub
 End Module
