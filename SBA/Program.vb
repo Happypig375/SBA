@@ -1,6 +1,8 @@
 ﻿Imports System.Console
 Imports System.Collections.ObjectModel
 Imports Unicode = System.Text.UnicodeEncoding
+Imports SBA
+
 Module SunnysBigAdventure
 #Region "Structures"
     Structure Delta(Of T)
@@ -124,13 +126,16 @@ Module SunnysBigAdventure
         Sub New(entities As ICollection(Of Entity))
             entities.Add(Me)
         End Sub
+        Protected Overridable Function BlockEntry(other As Entity, otherNewBounds As Rectangle) As Boolean
+            Return Bounds.HasValue AndAlso Bounds.GetValueOrDefault().SafeCollidesWith(otherNewBounds)
+        End Function
         Protected Function CanMoveTo(value As Rectangle?) As Boolean
             If value IsNot Nothing AndAlso CurrentRegion IsNot Nothing Then
                 Dim rect = value.GetValueOrDefault()
-                For Each entity In CurrentRegion.Entities
-                    If Me IsNot entity AndAlso entity.Bounds?.SafeCollidesWith(rect) Then Return False
-                Next
                 If rect.Left < 0 OrElse rect.Right >= WindowWidth OrElse rect.Top < 0 OrElse rect.Bottom >= WindowHeight Then Return False
+                For Each entity In CurrentRegion.Entities
+                    If Me IsNot entity AndAlso entity.BlockEntry(Me, rect) Then Return False
+                Next
             End If
             Return True
         End Function
@@ -226,6 +231,21 @@ Module SunnysBigAdventure
                 Draw(bounds.OldValue, Empty, Empty, Empty, Empty, Empty, Empty)
                 Draw(bounds.NewValue, "━"c, "┃"c, "┏"c, "┓"c, "┗"c, "┛"c)
             End If
+        End Sub
+    End Class
+    Class TriggerZone
+        Inherits RectangleEntity
+        Public Sub New(entities As ICollection(Of Entity), rect As Rectangle)
+            MyBase.New(entities, rect)
+        End Sub
+        Protected Overrides Function BlockEntry(other As Entity, otherNewBounds As Rectangle) As Boolean
+            Return False
+        End Function
+        Public Sub HandleKey(key As ConsoleKey)
+
+        End Sub
+
+        Protected Overrides Sub RedrawAt(bounds As Delta(Of Rectangle?)) ' Doesn't need to be drawn
         End Sub
     End Class
     Class TextEntity
@@ -379,7 +399,8 @@ Module SunnysBigAdventure
     MustInherit Class Region
         Implements IDisposable
         Sub New(Optional bedrock As Boolean = True)
-            If bedrock Then Equals(New RectangleEntity(WriteEntities, New Rectangle(0, 9, WindowWidth, 1)), Nothing)
+            If bedrock Then Equals(New RectangleEntity(WriteEntities,
+                                       New Rectangle(0, WindowHeight - 2, WindowWidth, 1)), Nothing)
         End Sub
         ''' <returns>Whether region was changed.</returns>
         Function Go(region As Func(Of Region)) As Boolean
@@ -411,9 +432,10 @@ Module SunnysBigAdventure
             Return _currentRegion
         End Get
     End Property
-    Public WriteOnly Property SetCurrentRegion As Func(Of Region) ' **Prevent collision detection between old and new region entities**
+    Public WriteOnly Property SetCurrentRegion As Func(Of Region)
         Set(value As Func(Of Region))
             _currentRegion.Dispose()
+            ' **Prevent collision detection between old and new region entities**
             _currentRegion = value()
         End Set
     End Property
