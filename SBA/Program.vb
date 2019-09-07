@@ -483,16 +483,16 @@ Module SunnysBigAdventure
             Sunny.Position = New Point(3, 5)
         End Sub
         Protected ReadOnly SBA As New TextEntity(WriteEntities, "SBA: Sunny's Big Adventure", New Point(10, 0))
-        Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(0, 1, WindowWidth, 8),
-            Nothing, Sub() Sunny.Sprite = Sunny_, Function(key)
-                                                      Select Case key
-                                                          Case ConsoleKey.Q
-                                                              Sunny.Sprite = If(Sunny.Sprite.Equals(Sunny_), Sunny_Angry, Sunny_)
-                                                              Return True
-                                                          Case Else
-                                                              Return False
-                                                      End Select
-                                                  End Function)
+        'Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(0, 1, WindowWidth, 8),
+        '    Nothing, Sub() Sunny.Sprite = Sunny_, Function(key)
+        '                                              Select Case key
+        '                                                  Case ConsoleKey.Q
+        '                                                      Sunny.Sprite = If(Sunny.Sprite.Equals(Sunny_), Sunny_Angry, Sunny_)
+        '                                                      Return True
+        '                                                  Case Else
+        '                                                      Return False
+        '                                              End Select
+        '                                          End Function)
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Nothing
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region2()
     End Class
@@ -512,6 +512,7 @@ Module SunnysBigAdventure
             Return
         End If
         OutputEncoding = Encoding.Unicode
+        Title = "SBA: Sunny's Big Adventure"
         Console.WindowWidth = WindowWidth
         Console.WindowHeight = WindowHeight
         CursorVisible = False
