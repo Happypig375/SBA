@@ -241,7 +241,8 @@ Module SunnysBigAdventure
     Class TriggerZone
         Inherits RectangleEntity
         Public Sub New(entities As ICollection(Of Entity), rect As Rectangle,
-                       enter As Action, leave As Action, keyPress As Func(Of ConsoleKey, Boolean))
+                       Optional enter As Action = Nothing, Optional leave As Action = Nothing,
+                       Optional keyPress As Func(Of ConsoleKey, Boolean) = Nothing)
             MyBase.New(entities, rect)
             Me.Enter = enter
             Me.Leave = leave
@@ -411,12 +412,12 @@ Module SunnysBigAdventure
     '3.2⤴⤵♻〽◼◻◾◽☖♷⚁⚄⚆⚈♼☗♵⚉⚀⚇♹♲♸⚂♺♴⚅♳♽⚃♶
     '4.0☕☔⚡⚠⬆⬇⬅⏏⚏⚋⚎⚑⚊⚍⚐⚌
     '4.1☘⚓⚒⚔⚙⚖⚗⚰⚱♿⚛⚕♾⚜⚫⚪⚩⚭⚢⚥⚘⚤⚦⚨⚣⚬⚮⚚⚯⚧
-    '5.0⚲
-    '5.1⭐⬛⬜⛁⚶⚼⛃⚸⚴⚹⚳⚵⚻⚷⛀⚝⚺⛂
-    '5.2⛷⛹⛰⛪⛩⛲⛺⛽⛵⛴⛅⛈⛱⛄⚽⚾⛳⛸⛑’⛏⛓⛔⭕❗⛟⛙⛞⛮⛶⛯⛜⛡⛿⛣⛊⛐⛾⛉⛚⛘⛠⛆⛝⛌⛕⛬⛍⛫⛖⚞⛨⚟⛻⛋⛒⛛⛭⛇⛼⚿⛗
-    '6.0✋✊⏳⏰⏱⏲✨⛎⏩⏭⏯⏪⏮⏫⏬✅❌❎➕➖➗➰➿❓❔❕⛧⛢⛤ // Right-Handed interlaced pentagram: ⛥ Left-Handed interlaced pentagram: ⛦
-    '7.0⏸⏹⏺
-    '10.₿
+    '5.0    // ⚲
+    '5.1⭐⬛⬜⚶⚼⚸⚴⚹⚳⚵⚻⚷⚝⚺  // ⛂⛁⛃⛀
+    '5.2⛪⛲⛺⛽⛵⛅⛄⚽⚾⛳’⛔⭕❗  // ⛩⛴⛈⛱⛸⛑⛏⛓⛷⛹⛰⛟⛙⛞⛮⛶⛯⛜⛡⛿⛣⛊⛐⛾⛉⛚⛘⛠⛆⛝⛌⛕⛬⛍⛫⛖⚞⛨⚟⛻⛋⛒⛛⛭⛇⛼⚿⛗
+    '6.0✋✊⏳⏰✨⛎⏩⏪⏫⏬✅❌❎➕➖➗➰➿❓❔❕ // ⏱⏲⏭⏯⏮⛧⛢⛤ // Right-Handed interlaced pentagram: ⛥ Left-Handed interlaced pentagram: ⛦
+    '7.0    // ⏸⏹⏺
+    '10.    // ₿
     Const Empty = " "c
     ReadOnly Empty_ As New Sprite(Empty)
     ReadOnly GlobalEntities As New List(Of Entity)
@@ -464,7 +465,7 @@ Module SunnysBigAdventure
             Next
         End Sub
     End Class
-    Dim _currentRegion As Region = New Region1_Title()
+    Dim _currentRegion As Region = New Region2_NumberGuess()
     Public ReadOnly Property CurrentRegion As Region
         Get
             Return _currentRegion
@@ -479,10 +480,9 @@ Module SunnysBigAdventure
     End Property
     Class Region1_Title
         Inherits Region
-        Sub New()
-            Sunny.Position = New Point(3, 5)
-        End Sub
         Protected ReadOnly SBA As New TextEntity(WriteEntities, "SBA: Sunny's Big Adventure", New Point(10, 0))
+        Protected ReadOnly Arrows As New TextEntity(WriteEntities, "▶▶▶▶▶▶▶▶", New Point(20, 1))
+        Protected ReadOnly Keybinds As New TextEntity(WriteEntities, "Arrow keys: Move", New Point(10, 9))
         'Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(0, 1, WindowWidth, 8),
         '    Nothing, Sub() Sunny.Sprite = Sunny_, Function(key)
         '                                              Select Case key
@@ -494,11 +494,14 @@ Module SunnysBigAdventure
         '                                              End Select
         '                                          End Function)
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Nothing
-        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region2()
+        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region2_NumberGuess()
     End Class
-    Class Region2
+    Class Region2_NumberGuess
         Inherits Region
-        Protected ReadOnly SBA As New TextEntity(WriteEntities, "Region 2", New Point(15, 0))
+        Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct", New Point(0, 0))
+        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~100)", New Point(0, 1))
+        Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8))
+        Protected ReadOnly Trigger As New TriggerZone()
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region1_Title()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
     End Class
@@ -516,6 +519,7 @@ Module SunnysBigAdventure
         Console.WindowWidth = WindowWidth
         Console.WindowHeight = WindowHeight
         CursorVisible = False
+        Sunny.Position = New Point(3, 5)
         While True
             RaiseEvent Tick()
             Dim key = ReadKey(TimeSpan.FromSeconds(0.2))
