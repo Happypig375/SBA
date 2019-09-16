@@ -190,7 +190,7 @@ Module SunnysBigAdventure
     End Class
     Class RectangleEntity
         Inherits Entity
-        Public Sub New(entities As ICollection(Of Entity), rect As Rectangle)
+        Public Sub New(entities As ICollection(Of Entity), rect As Rectangle?)
             MyBase.New(entities)
             Rectangle = rect
         End Sub
@@ -240,7 +240,7 @@ Module SunnysBigAdventure
     End Class
     Class TriggerZone
         Inherits RectangleEntity
-        Public Sub New(entities As ICollection(Of Entity), rect As Rectangle,
+        Public Sub New(entities As ICollection(Of Entity), rect As Rectangle?,
                        Optional enter As Action = Nothing, Optional leave As Action = Nothing,
                        Optional keyPress As Func(Of ConsoleKey, Boolean) = Nothing)
             MyBase.New(entities, rect)
@@ -277,7 +277,7 @@ Module SunnysBigAdventure
     End Class
     Class TextEntity
         Inherits Entity
-        Public Sub New(entities As ICollection(Of Entity), text As String, position As Point)
+        Public Sub New(entities As ICollection(Of Entity), text As String, Optional position As Point? = Nothing)
             MyBase.New(entities)
             Me.Text = text
             Me.Position = position
@@ -299,13 +299,14 @@ Module SunnysBigAdventure
             RedrawAt(bounds, New Delta(Of String)(_text))
         End Sub
         Protected Overloads Sub RedrawAt(bounds As Delta(Of Rectangle?), text As Delta(Of String))
-            If bounds.Changed Then IfHasValue(bounds.OldValue, Sub(point)
-                                                                   ResetColor()
-                                                                   CursorPosition = point.TopLeft
-                                                                   For i = 1 To text.OldValue.Length
-                                                                       Write(Empty)
-                                                                   Next
-                                                               End Sub)
+            IfHasValue(bounds.OldValue, Sub(point)
+                                            ResetColor()
+                                            Debug.WriteLine("Pos: {0}", CursorPosition)
+                                            CursorPosition = point.TopLeft
+                                            For i = 1 To text.OldValue.Length
+                                                Write(Empty)
+                                            Next
+                                        End Sub)
             IfHasValue(bounds.NewValue, Sub(point)
                                             ResetColor()
                                             CursorPosition = point.TopLeft
@@ -378,13 +379,12 @@ Module SunnysBigAdventure
             MyBase.New(entities, sprite)
         End Sub
         Public Sub HandleKey(key As ConsoleKey)
-            If Trigger Is Nothing OrElse Not Trigger.KeyPress(key) Then
+            If Trigger?.KeyPress Is Nothing OrElse Not Trigger.KeyPress(key) Then
                 Select Case key
                     Case ConsoleKey.LeftArrow : GoLeft()
                     Case ConsoleKey.RightArrow : GoRight()
                     Case ConsoleKey.UpArrow : GoUp()
                     Case ConsoleKey.DownArrow : GoDown()
-                    Case Else
                 End Select
             End If
         End Sub
@@ -498,10 +498,50 @@ Module SunnysBigAdventure
     End Class
     Class Region2_NumberGuess
         Inherits Region
-        Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct", New Point(0, 0))
-        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~100)", New Point(0, 1))
+        Protected Passcode As Byte = CByte(New Random().Next(101))
+        Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct")
+        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~100)")
+        Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: I must guess it...")
+        Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
         Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8))
-        Protected ReadOnly Trigger As New TriggerZone()
+        Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 6, 6, 3),
+                                                      Sub()
+                                                          Instruction.Position = New Point(10, 0)
+                                                          Threading.Thread.Sleep(500)
+                                                          Instruction2.Position = New Point(10, 1)
+                                                          Threading.Thread.Sleep(500)
+                                                          Instruction3.Position = New Point(0, 2)
+                                                          Threading.Thread.Sleep(500)
+                                                          Input.Position = New Point(0, 3)
+                                                      End Sub, keyPress:=
+                                                      Function(key)
+                                                          Select Case key
+                                                              Case ConsoleKey.D0 To ConsoleKey.D9
+                                                                  Input.Text &= key.ToString()(1)
+                                                              Case ConsoleKey.Enter
+                                                                  Dim inputNumber As Byte
+                                                                  If Byte.TryParse(String.Concat(Input.Text.SkipWhile(Function(c) Not Char.IsDigit(c))),
+                                                                                      inputNumber) Then
+                                                                      Select Case inputNumber
+                                                                          Case Is < Passcode
+                                                                              Instruction3.Text = "Sunny: The input is too small..."
+                                                                          Case Is > Passcode
+                                                                              Instruction3.Text = "Sunny: The input is too large..."
+                                                                          Case Else
+                                                                              Instruction3.Text = "Sunny: Yes! The passcode is correct!"
+                                                                              Instruction.Dispose()
+                                                                              Instruction2.Dispose()
+                                                                              Input.Dispose()
+                                                                              Barrier.Dispose()
+                                                                              Trigger.Dispose()
+                                                                      End Select
+                                                                  Else
+                                                                      Instruction3.Text = "Sunny: The input is too large..." ' inputNumber > 255
+                                                                  End If
+                                                                  Input.Text = "Input: "
+                                                          End Select
+                                                          Return True
+                                                      End Function)
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region1_Title()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
     End Class
