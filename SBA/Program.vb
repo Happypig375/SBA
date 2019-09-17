@@ -1,7 +1,7 @@
 ﻿Imports System.Console
+Imports System.Collections.Generic
 Imports System.Collections.ObjectModel
 Imports Encoding = System.Text.Encoding
-Imports SBA
 
 Module SunnysBigAdventure
 #Region "Structures"
@@ -105,15 +105,6 @@ Module SunnysBigAdventure
     End Function
     Function IfHasValue(Of T As Structure, TReturn)(nullable As T?, f As Func(Of T, TReturn), defaultValue As TReturn) As TReturn
         Return If(nullable.HasValue, f(nullable.GetValueOrDefault()), defaultValue)
-    End Function
-    Function ReadKey(timeout As TimeSpan) As ConsoleKey?
-        If KeyAvailable Then Return Console.ReadKey(True).Key
-        Dim beginWait = Date.Now
-        While Not KeyAvailable And Date.Now.Subtract(beginWait) < timeout
-            Threading.Thread.Sleep(100)
-            If KeyAvailable Then Return Console.ReadKey(True).Key
-        End While
-        Return Nothing
     End Function
     Sub WriteAt(position As Point?, sprite As Sprite)
         If position.HasValue Then
@@ -549,21 +540,46 @@ Module SunnysBigAdventure
     Const WindowWidth = 48
     Const WindowHeight = 10
     Public Event Tick()
+    ReadOnly keyLock As New Object()
+    ReadOnly keys As New Stack(Of ConsoleKey)()
     Sub Main()
         If LargestWindowWidth < 48 Or LargestWindowHeight < 10 Then
             WriteLine("ERROR: Please decrease font size")
             Return
         End If
-        OutputEncoding = Encoding.Unicode
+        OutputEncoding = Encoding.UTF8
         Title = "SBA: Sunny's Big Adventure"
-        Console.WindowWidth = WindowWidth
-        Console.WindowHeight = WindowHeight
+        ' Console.WindowWidth = WindowWidth
+        ' Console.WindowHeight = WindowHeight
         CursorVisible = False
         Sunny.Position = New Point(3, 5)
+        Dim keyThread As New Threading.Thread(New Threading.ThreadStart(
+            Sub()
+                While True
+                    Dim key = ReadKey(true).Key
+                    SyncLock keyLock
+                        keys.Push(key)
+                    End SyncLock
+                End While
+            End Sub
+        ))
+        keyThread.Start()
         While True
             RaiseEvent Tick()
-            Dim key = ReadKey(TimeSpan.FromSeconds(0.2))
-            If key IsNot Nothing Then ActiveEntity.HandleKey(key.GetValueOrDefault())
+            Dim tempKeys As New Stack(Of ConsoleKey)()
+            Dim key As ConsoleKey
+            If keys.Count > 0 then
+                SyncLock keyLock
+                    While keys.TryPop(key)
+                        tempKeys.Push(key)
+                    End While
+                End SyncLock
+            end if
+            While tempkeys.TryPop(key)
+                Debug.WriteLine(key)
+                ActiveEntity.HandleKey(key)
+            End While
+            Threading.Thread.Sleep(200)
         End While
     End Sub
 End Module
