@@ -241,8 +241,8 @@ Module SunnysBigAdventure
     Class TriggerZone
         Inherits RectangleEntity
         Public Sub New(entities As ICollection(Of Entity), rect As Rectangle?,
-                       Optional enter As Action = Nothing, Optional leave As Action = Nothing,
-                       Optional keyPress As Func(Of ConsoleKey, Boolean) = Nothing)
+                       Optional keyPress As Func(Of ConsoleKey, Boolean) = Nothing,
+                       Optional enter As Action = Nothing, Optional leave As Action = Nothing)
             MyBase.New(entities, rect)
             Me.Enter = enter
             Me.Leave = leave
@@ -403,6 +403,30 @@ Module SunnysBigAdventure
             Return ret
         End Function
     End Class
+    Class GravityEntityFactory
+        Class GravityEntityFactoryEntity
+            Inherits GravityEntity
+            Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
+                MyBase.New(entities, sprite)
+            End Sub
+        End Class
+        Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
+            Me.Entities = entities
+            Me.Sprite = sprite
+        End Sub
+        ReadOnly Sprite As Sprite
+        ReadOnly Entities As ICollection(Of Entity)
+        Public Property Template As Sprite
+        Public Sub Create(position As Point)
+            Entities.Add(New GravityEntityFactoryEntity(Entities, Sprite) With {.Position = position})
+        End Sub
+        Public Sub RemoveAll()
+            For Each item In Entities.OfType(Of GravityEntityFactoryEntity)
+                Entities.Remove(item)
+                item.Dispose()
+            Next
+        End Sub
+    End Class
 #End Region
 #Region "Global Entities"
     'Unicode: 
@@ -505,15 +529,6 @@ Module SunnysBigAdventure
         Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
         Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8))
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 6, 6, 3),
-                                                      Sub()
-                                                          Instruction.Position = New Point(10, 0)
-                                                          Threading.Thread.Sleep(500)
-                                                          Instruction2.Position = New Point(10, 1)
-                                                          Threading.Thread.Sleep(500)
-                                                          Instruction3.Position = New Point(0, 2)
-                                                          Threading.Thread.Sleep(500)
-                                                          Input.Position = New Point(0, 3)
-                                                      End Sub, keyPress:=
                                                       Function(key)
                                                           Select Case key
                                                               Case ConsoleKey.D0 To ConsoleKey.D9
@@ -541,8 +556,30 @@ Module SunnysBigAdventure
                                                                   Input.Text = "Input: "
                                                           End Select
                                                           Return True
-                                                      End Function)
+                                                      End Function,
+                                                      Sub()
+                                                          Instruction.Position = New Point(10, 0)
+                                                          Threading.Thread.Sleep(500)
+                                                          Instruction2.Position = New Point(10, 1)
+                                                          Threading.Thread.Sleep(500)
+                                                          Instruction3.Position = New Point(0, 2)
+                                                          Threading.Thread.Sleep(500)
+                                                          Input.Position = New Point(0, 3)
+                                                      End Sub)
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region1_Title()
+        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region3_ConnectFour()
+    End Class
+    Class Region3_ConnectFour
+        Inherits Region
+        Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("⚪"c))
+        Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("⚫"c))
+        Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(10, 3, 10, 6),
+                                                      Function(key)
+                                                          Select Case key
+                                                              Case ConsoleKey.Enter
+                                                          End Select
+                                                      End Function)
+        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
     End Class
 #End Region
