@@ -53,7 +53,7 @@ Module SunnysBigAdventure
         End Property
         Public ReadOnly Property Right As Integer
             Get
-                Return TopLeft.Left + Width - 1
+                Return TopLeft.Left - 1
             End Get
         End Property
         Public ReadOnly Property Top As Integer
@@ -86,6 +86,9 @@ Module SunnysBigAdventure
     End Structure
 #End Region
 #Region "Helpers"
+    ReadOnly NeedDoubleRectangleWidth As Boolean = Environment.OSVersion.Platform = PlatformID.Win32NT AndAlso
+                                                   Environment.OSVersion.Version.Major = 6 AndAlso
+                                                   Environment.OSVersion.Version.Minor = 1
     Property CursorPosition As Point
         Get
             Return New Point(CursorLeft, CursorTop)
@@ -249,7 +252,9 @@ Module SunnysBigAdventure
             Me.KeyPress = keyPress
         End Sub
         Public Property Enter As Action
+        Dim EnterLock As Boolean
         Public Property Leave As Action
+        Dim LeaveLock As Boolean
         ''' <returns>Whether the key has been handled.</returns>
         Public Property KeyPress As Func(Of ConsoleKey, Boolean)
         Protected Overrides Function ForbidEntry(other As Entity, otherNewBounds As Rectangle) As Boolean
@@ -257,10 +262,18 @@ Module SunnysBigAdventure
                 Dim player = DirectCast(other, PlayerEntity)
                 If Bounds?.PreciseCollidesWith(otherNewBounds) Then
                     player.Trigger = Me
-                    Enter?.Invoke()
+                    If Not EnterLock Then
+                        EnterLock = True
+                        Enter?.Invoke()
+                        EnterLock = False
+                    End If
                 ElseIf player.Trigger Is Me Then
-                    player.Trigger = Nothing
-                    Leave?.Invoke()
+                    If Not LeaveLock Then
+                        LeaveLock = True
+                        player.Trigger = Nothing
+                        Leave?.Invoke()
+                        LeaveLock = False
+                    End If
                 End If
             End If
             Return False
@@ -404,7 +417,7 @@ Module SunnysBigAdventure
         End Function
     End Class
     Class GravityEntityFactory
-        Class GravityEntityFactoryEntity
+        Private Class GravityEntityFactoryEntity
             Inherits GravityEntity
             Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
                 MyBase.New(entities, sprite)
@@ -417,7 +430,7 @@ Module SunnysBigAdventure
         ReadOnly Sprite As Sprite
         ReadOnly Entities As ICollection(Of Entity)
         Public Property Template As Sprite
-        Public Sub Create(position As Point)
+        Public Sub Create(position As Point?)
             Entities.Add(New GravityEntityFactoryEntity(Entities, Sprite) With {.Position = position})
         End Sub
         Public Sub RemoveAll()
@@ -489,7 +502,7 @@ Module SunnysBigAdventure
             Next
         End Sub
     End Class
-    Dim _currentRegion As Region = New Region2_NumberGuess()
+    Dim _currentRegion As Region = New Region3_ConnectFour()
     Public ReadOnly Property CurrentRegion As Region
         Get
             Return _currentRegion
@@ -571,14 +584,29 @@ Module SunnysBigAdventure
     End Class
     Class Region3_ConnectFour
         Inherits Region
-        Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("⚪"c))
-        Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("⚫"c))
-        Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(10, 3, 10, 6),
+        Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("○"c))
+        Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("●"c))
+        Protected ReadOnly GameField As New RectangleEntity(WriteEntities, New Rectangle(8, 1, 18, 8))
+        Protected ReadOnly Trigger As New TriggerZone(WriteEntities,
+                                                      IfHasValue(GameField.Rectangle, Function(rect) _
+                                                          New Rectangle(rect.Left - 3, rect.Top - 1, rect.Width + 6, rect.Height + 1)),
                                                       Function(key)
                                                           Select Case key
                                                               Case ConsoleKey.Enter
+                                                                  Whites.Create(IfHasValue(ActiveEntity.Position,
+                                                                                           Function(pos) New Point(pos.Left, pos.Top + 2)))
+                                                              Case ConsoleKey.LeftArrow
+                                                                  ActiveEntity.GoLeft()
+                                                                  ActiveEntity.GoLeft()
+                                                              Case ConsoleKey.RightArrow
+                                                                  ActiveEntity.GoRight()
+                                                                  ActiveEntity.GoRight()
                                                           End Select
-                                                      End Function)
+                                                          Return True
+                                                      End Function,
+    Sub()
+        ActiveEntity.Position = IfHasValue(ActiveEntity.Position, Function(pos) New Point(pos.Left, 0))
+    End Sub)
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
     End Class
@@ -596,7 +624,7 @@ Module SunnysBigAdventure
         Console.WindowWidth = WindowWidth
         Console.WindowHeight = WindowHeight
         CursorVisible = False
-        Sunny.Position = New Point(3, 5)
+        Sunny.Position = New Point(2, 5)
         While True
             RaiseEvent Tick()
             Dim key = ReadKey(TimeSpan.FromSeconds(0.2))
