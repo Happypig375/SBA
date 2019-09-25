@@ -53,7 +53,7 @@ Module SunnysBigAdventure
         End Property
         Public ReadOnly Property Right As Integer
             Get
-                Return TopLeft.Left - 1
+                Return TopLeft.Left + Width - 1
             End Get
         End Property
         Public ReadOnly Property Top As Integer
@@ -218,11 +218,12 @@ Module SunnysBigAdventure
                                 ResetColor()
                                 SetCursorPosition(rect.Left, rect.Bottom)
                                 Write(bottomLeft)
-                                For x = rect.Left + 1 To rect.Right - 1
+                                For x = 1 To rect.Width - 2
+                                    SetCursorPosition(rect.Left + x, rect.Bottom)
                                     Write(horizontal)
                                 Next
                                 Write(bottomRight)
-                                For y = rect.Top + 1 To rect.Bottom - 1
+                                For y = rect.Bottom - 1 To rect.Top + 1 Step -1
                                     SetCursorPosition(rect.Left, y)
                                     Write(vertical)
                                     SetCursorPosition(rect.Right, y)
@@ -230,7 +231,8 @@ Module SunnysBigAdventure
                                 Next
                                 CursorPosition = rect.TopLeft
                                 Write(topLeft)
-                                For x = rect.Left + 1 To rect.Right - 1
+                                For x = 1 To rect.Width - 2
+                                    SetCursorPosition(rect.Left + x, rect.Top)
                                     Write(horizontal)
                                 Next
                                 Write(topRight)
@@ -586,27 +588,24 @@ Module SunnysBigAdventure
         Inherits Region
         Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("○"c))
         Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("●"c))
+        Protected ReadOnly Hi As New SpriteEntity(WriteEntities, New Sprite("5"c)) With {.Position = New Point(30, 5)}
         Protected ReadOnly GameField As New RectangleEntity(WriteEntities, New Rectangle(8, 1, 18, 8))
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities,
                                                       IfHasValue(GameField.Rectangle, Function(rect) _
                                                           New Rectangle(rect.Left - 3, rect.Top - 1, rect.Width + 6, rect.Height + 1)),
                                                       Function(key)
                                                           Select Case key
-                                                              Case ConsoleKey.Enter
-                                                                  Whites.Create(IfHasValue(ActiveEntity.Position,
-                                                                                           Function(pos) New Point(pos.Left, pos.Top + 2)))
-                                                              Case ConsoleKey.LeftArrow
-                                                                  ActiveEntity.GoLeft()
-                                                                  ActiveEntity.GoLeft()
-                                                              Case ConsoleKey.RightArrow
-                                                                  ActiveEntity.GoRight()
-                                                                  ActiveEntity.GoRight()
+                                                              Case ConsoleKey.D0 To ConsoleKey.D9
+                                                                  Dim i = key - ConsoleKey.D0
+                                                                  Whites.Create(IfHasValue(GameField.Rectangle, Function(rect) _
+                                                                      New Point(rect.Left + i, 2)))
                                                           End Select
                                                           Return True
                                                       End Function,
     Sub()
         ActiveEntity.Position = IfHasValue(ActiveEntity.Position, Function(pos) New Point(pos.Left, 0))
     End Sub)
+        Protected ReadOnly H As New SpriteEntity(WriteEntities, New Sprite)
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
     End Class
