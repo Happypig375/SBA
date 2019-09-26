@@ -200,10 +200,10 @@ Module SunnysBigAdventure
         Protected Overrides Function ForbidEntry(other As Entity, otherBounds As Rectangle) As Boolean
             Return IfHasValue(Bounds, Function(rect) _
                 TypeOf other Is Entity AndAlso (
-                New Rectangle(rect.Left, rect.Top, rect.Right, rect.Top).SafeCollidesWith(otherBounds) OrElse
-                New Rectangle(rect.Left, rect.Bottom, rect.Right, rect.Bottom).SafeCollidesWith(otherBounds) OrElse
-                New Rectangle(rect.Left, rect.Top, rect.Left, rect.Bottom).SafeCollidesWith(otherBounds) OrElse
-                New Rectangle(rect.Right, rect.Top, rect.Right, rect.Bottom).SafeCollidesWith(otherBounds)), False)
+                New Rectangle(rect.TopLeft, New Point(rect.Right, rect.Top)).SafeCollidesWith(otherBounds) OrElse
+                New Rectangle(rect.TopLeft, New Point(rect.Left, rect.Bottom)).SafeCollidesWith(otherBounds) OrElse
+                New Rectangle(New Point(rect.Left, rect.Bottom), New Point(rect.Right, rect.Bottom)).SafeCollidesWith(otherBounds) OrElse
+                New Rectangle(New Point(rect.Right, rect.Top), New Point(rect.Right, rect.Bottom)).SafeCollidesWith(otherBounds)), False)
         End Function
         Protected Overrides Function BoundsForNewPoint(point As Point) As Rectangle?
             Return IfHasValue(Bounds, Function(rect) New Rectangle(point, rect.Width, rect.Height))
@@ -600,7 +600,7 @@ Module SunnysBigAdventure
         Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("○"c))
         Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("●"c))
         Protected ReadOnly Hi As New SpriteEntity(WriteEntities, New Sprite("5"c)) With {.Position = New Point(30, 5)}
-        Protected ReadOnly GameField As New RectangleEntity(WriteEntities, New Rectangle(8, 1, 18, 8))
+        Protected ReadOnly GameField As New RectangleEntity(WriteEntities, New Rectangle(8, 1, 17, 8))
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities,
                                                       IfHasValue(GameField.Rectangle, Function(rect) _
                                                           New Rectangle(rect.Left - 3, rect.Top - 1, rect.Width + 6, rect.Height + 1)),
@@ -614,7 +614,7 @@ Module SunnysBigAdventure
                                                           Return True
                                                       End Function,
     Sub()
-        ActiveEntity.Position = IfHasValue(ActiveEntity.Position, Function(pos) New Point(pos.Left, 0))
+        ActiveEntity.Position = IfHasValue(ActiveEntity.Position, Function(pos) New Point(2, 3))
     End Sub)
         Protected ReadOnly H As New SpriteEntity(WriteEntities, New Sprite)
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
