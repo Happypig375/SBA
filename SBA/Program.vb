@@ -197,6 +197,14 @@ Module SunnysBigAdventure
             MyBase.New(entities)
             Rectangle = rect
         End Sub
+        Protected Overrides Function ForbidEntry(other As Entity, otherBounds As Rectangle) As Boolean
+            Return IfHasValue(Bounds, Function(rect) _
+                TypeOf other Is Entity AndAlso (
+                New Rectangle(rect.Left, rect.Top, rect.Right, rect.Top).SafeCollidesWith(otherBounds) OrElse
+                New Rectangle(rect.Left, rect.Bottom, rect.Right, rect.Bottom).SafeCollidesWith(otherBounds) OrElse
+                New Rectangle(rect.Left, rect.Top, rect.Left, rect.Bottom).SafeCollidesWith(otherBounds) OrElse
+                New Rectangle(rect.Right, rect.Top, rect.Right, rect.Bottom).SafeCollidesWith(otherBounds)), False)
+        End Function
         Protected Overrides Function BoundsForNewPoint(point As Point) As Rectangle?
             Return IfHasValue(Bounds, Function(rect) New Rectangle(point, rect.Width, rect.Height))
         End Function
@@ -215,13 +223,18 @@ Module SunnysBigAdventure
                         topLeft As Char, topRight As Char, bottomLeft As Char, bottomRight As Char)
                         IfHasValue(Rectangle,
                             Sub(rect)
+                                Dim DrawHorizontal =
+                                    Sub(y As Integer)
+                                        For x = 2 To rect.Width - 1 Step If(NeedDoubleRectangleWidth, 2, 1)
+                                            SetCursorPosition(rect.Left + x, y)
+                                            Write(horizontal)
+                                        Next
+                                    End Sub
                                 ResetColor()
+                                DrawHorizontal(rect.Bottom)
                                 SetCursorPosition(rect.Left, rect.Bottom)
                                 Write(bottomLeft)
-                                For x = 1 To rect.Width - 2
-                                    SetCursorPosition(rect.Left + x, rect.Bottom)
-                                    Write(horizontal)
-                                Next
+                                SetCursorPosition(rect.Right, rect.Bottom)
                                 Write(bottomRight)
                                 For y = rect.Bottom - 1 To rect.Top + 1 Step -1
                                     SetCursorPosition(rect.Left, y)
@@ -229,12 +242,10 @@ Module SunnysBigAdventure
                                     SetCursorPosition(rect.Right, y)
                                     Write(vertical)
                                 Next
+                                DrawHorizontal(rect.Top)
                                 CursorPosition = rect.TopLeft
                                 Write(topLeft)
-                                For x = 1 To rect.Width - 2
-                                    SetCursorPosition(rect.Left + x, rect.Top)
-                                    Write(horizontal)
-                                Next
+                                SetCursorPosition(rect.Right, rect.Top)
                                 Write(topRight)
                             End Sub)
                     End Sub
@@ -598,7 +609,7 @@ Module SunnysBigAdventure
                                                               Case ConsoleKey.D0 To ConsoleKey.D9
                                                                   Dim i = key - ConsoleKey.D0
                                                                   Whites.Create(IfHasValue(GameField.Rectangle, Function(rect) _
-                                                                      New Point(rect.Left + i, 2)))
+                                                                      New Point(rect.Left + i * 2, 2)))
                                                           End Select
                                                           Return True
                                                       End Function,
