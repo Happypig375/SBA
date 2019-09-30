@@ -21,6 +21,7 @@ Module SunnysBigAdventure
         Public ReadOnly Property NewValue As T
     End Structure
     Structure Point
+        Implements IComparable(Of Point)
         Public Sub New(left As Integer, top As Integer)
             Me.Left = left
             Me.Top = top
@@ -29,6 +30,13 @@ Module SunnysBigAdventure
         Public ReadOnly Property Top As Integer
         Public Overrides Function ToString() As String
             Return $"({Left}, {Top})"
+        End Function
+        Public Function CompareTo(other As Point) As Integer Implements IComparable(Of Point).CompareTo
+            If Left < other.Left Then Return -1
+            If Left > other.Left Then Return 1
+            If Top < other.Top Then Return -1
+            If Top > other.Top Then Return 1
+            Return 0
         End Function
     End Structure
     Structure Rectangle
@@ -445,9 +453,11 @@ Module SunnysBigAdventure
         End Sub
         ReadOnly Sprite As Sprite
         ReadOnly Entities As ICollection(Of Entity)
+        Public ReadOnly Positions As New SortedSet(Of Point?)()
         Public Property Template As Sprite
         Public Sub Create(position As Point?)
             Entities.Add(New GravityEntityFactoryEntity(Entities, Sprite) With {.Position = position})
+            Positions.Add(position)
         End Sub
         Public Sub RemoveAll()
             For Each item In Entities.OfType(Of GravityEntityFactoryEntity)
@@ -600,24 +610,40 @@ Module SunnysBigAdventure
     End Class
     Class Region3_ConnectFour
         Inherits Region
+        Enum Player
+            Player
+            CPU
+        End Enum
+        Protected ReadOnly GameArea As New Rectangle(8, 1, 17, 8)
+        Function DetectWin() As Player?
+            Dim Connected = Function(p1 As Point, p2 As Point, p3 As Point, p4 As Point)
+                                Dim Matches = Function(side As GravityEntityFactory, point As Point) _
+                                    side.Positions.Contains(New Point(GameArea.Left + point.Left * 2, GameArea.Top + 1 + point.Top))
+                                If Matches(Whites, p1) AndAlso Matches(Whites, p2) AndAlso
+                                   Matches(Whites, p3) AndAlso Matches(Whites, p4) Then Return Player.Player
+                                If Matches(Blacks, p1) AndAlso Matches(Blacks, p2) AndAlso
+                                   Matches(Blacks, p3) AndAlso Matches(Blacks, p4) Then Return Player.CPU
+                                Return Nothing
+                            End Function
+        End Function
         Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("○"c))
         Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("●"c))
         Protected ReadOnly Hi As New SpriteEntity(WriteEntities, New Sprite("5"c)) With {.Position = New Point(30, 5)}
-        Protected ReadOnly GameField As New RectangleEntity(WriteEntities, New Rectangle(8, 1, 17, 8))
+        Protected ReadOnly GameField As New RectangleEntity(WriteEntities, GameArea)
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities,
-                                                      IfHasValue(GameField.Rectangle, Function(rect) _
-                                                          New Rectangle(rect.Left - 3, rect.Top - 1, rect.Width + 6, rect.Height + 1)),
+                                                      New Rectangle(GameArea.Left - 3, GameArea.Top - 1,
+                                                                    GameArea.Width + 6, GameArea.Height + 1),
                                                       Function(key)
                                                           Select Case key
                                                               Case ConsoleKey.D1 To ConsoleKey.D7
                                                                   Dim i = key - ConsoleKey.D0
-                                                                  Whites.Create(IfHasValue(GameField.Rectangle, Function(rect) _
-                                                                      New Point(rect.Left + i * 2, 2)))
+                                                                  Whites.Create(New Point(
+                                                                                GameArea.Left + i * 2, GameArea.Top + 1))
                                                           End Select
                                                           Return True
                                                       End Function,
-            Sub() Instructions.Position = New Point(8, 0))
-        Protected ReadOnly Instructions As New TextEntity(WriteEntities, "Press 1 to 7 to add your move")
+            Sub() Instructions.Position = New Point(3, 0))
+        Protected ReadOnly Instructions As New TextEntity(WriteEntities, "Press 1~7 to add a piece. Connect 4 to win")
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
     End Class
