@@ -141,8 +141,10 @@ Module SunnysBigAdventure
             If value IsNot Nothing AndAlso CurrentRegion IsNot Nothing Then
                 Dim rect = value.GetValueOrDefault()
                 If rect.Left < 0 OrElse rect.Right >= WindowWidth OrElse rect.Top < 0 OrElse rect.Bottom >= WindowHeight Then Return False
+                Dim newPosition = Position
                 For Each entity In CurrentRegion.Entities
                     If Me IsNot entity AndAlso entity.ForbidEntry(Me, rect) Then Return False
+                    If Not newPosition?.Equals(Position) Then Return False ' Position was set in ForbidEntry, already moved elsewhere
                 Next
             End If
             Return True
@@ -164,6 +166,7 @@ Module SunnysBigAdventure
                 Return Bounds?.TopLeft
             End Get
             Set(value As Point?)
+                Debug.WriteLineIf(TypeOf Me Is PlayerEntity, $"Player Position = {value}")
                 Bounds = IfHasValue(value, AddressOf BoundsForNewPoint)
             End Set
         End Property
@@ -606,17 +609,15 @@ Module SunnysBigAdventure
                                                           New Rectangle(rect.Left - 3, rect.Top - 1, rect.Width + 6, rect.Height + 1)),
                                                       Function(key)
                                                           Select Case key
-                                                              Case ConsoleKey.D0 To ConsoleKey.D9
+                                                              Case ConsoleKey.D1 To ConsoleKey.D7
                                                                   Dim i = key - ConsoleKey.D0
                                                                   Whites.Create(IfHasValue(GameField.Rectangle, Function(rect) _
                                                                       New Point(rect.Left + i * 2, 2)))
                                                           End Select
                                                           Return True
                                                       End Function,
-    Sub()
-        ActiveEntity.Position = IfHasValue(ActiveEntity.Position, Function(pos) New Point(2, 3))
-    End Sub)
-        Protected ReadOnly H As New SpriteEntity(WriteEntities, New Sprite)
+            Sub() Instructions.Position = New Point(8, 0))
+        Protected ReadOnly Instructions As New TextEntity(WriteEntities, "Press 1 to 7 to add your move")
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
     End Class
