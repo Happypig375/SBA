@@ -443,8 +443,10 @@ Module SunnysBigAdventure
     Class GravityEntityFactory
         Private Class GravityEntityFactoryEntity
             Inherits GravityEntity
-            Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
+            Friend Owner As GravityEntityFactory
+            Public Sub New(entities As ICollection(Of Entity), sprite As Sprite, owner As GravityEntityFactory)
                 MyBase.New(entities, sprite)
+                Me.Owner = owner
             End Sub
         End Class
         Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
@@ -453,18 +455,22 @@ Module SunnysBigAdventure
         End Sub
         ReadOnly Sprite As Sprite
         ReadOnly Entities As ICollection(Of Entity)
-        Public ReadOnly Positions As New SortedSet(Of Point?)()
         Public Property Template As Sprite
-        Public Sub Create(position As Point?)
-            Entities.Add(New GravityEntityFactoryEntity(Entities, Sprite) With {.Position = position})
-            Positions.Add(position)
+        Public Sub Add(position As Point?)
+            Entities.Add(New GravityEntityFactoryEntity(Entities, Sprite, Me) With {.Position = position})
         End Sub
-        Public Sub RemoveAll()
-            For Each item In Entities.OfType(Of GravityEntityFactoryEntity)
+        Public Sub Clear()
+            For Each item In Entities.OfType(Of GravityEntityFactoryEntity).Where(Function(e) e.Owner Is Me)
                 Entities.Remove(item)
                 item.Dispose()
             Next
         End Sub
+        Public Function ItemAt(position As Point) As GravityEntity
+            For Each item In Entities.OfType(Of GravityEntityFactoryEntity).Where(Function(e) e.Owner Is Me)
+                If item.Position?.Equals(position) Then Return item
+            Next
+            Return Nothing
+        End Function
     End Class
 #End Region
 #Region "Global Entities"
@@ -611,25 +617,69 @@ Module SunnysBigAdventure
     Class Region3_ConnectFour
         Inherits Region
         Enum Player
+            None
             Player
             CPU
         End Enum
         Protected ReadOnly GameArea As New Rectangle(8, 1, 17, 8)
-        Function DetectWin() As Player?
+        Protected Function WhoWin() As Player
             Dim Connected = Function(p1 As Point, p2 As Point, p3 As Point, p4 As Point)
-                                Dim Matches = Function(side As GravityEntityFactory, point As Point) _
-                                    side.Positions.Contains(New Point(GameArea.Left + point.Left * 2, GameArea.Top + 1 + point.Top))
+                                Dim Matches =
+                                    Function(side As GravityEntityFactory, point As Point) _
+                                        side.ItemAt(New Point(GameArea.Left + point.Left * 2, GameArea.Top + point.Top)) _
+                                        ?.VerticalVelocity = 0
                                 If Matches(Whites, p1) AndAlso Matches(Whites, p2) AndAlso
                                    Matches(Whites, p3) AndAlso Matches(Whites, p4) Then Return Player.Player
                                 If Matches(Blacks, p1) AndAlso Matches(Blacks, p2) AndAlso
                                    Matches(Blacks, p3) AndAlso Matches(Blacks, p4) Then Return Player.CPU
-                                Return Nothing
+                                Return Player.None
                             End Function
+            ' -
+            For y = 1 To 7
+                For x = 1 To 4
+                    WhoWin = Connected(New Point(x, y), New Point(x + 1, y), New Point(x + 2, y), New Point(x + 3, y))
+                    If WhoWin <> Player.None Then Return WhoWin
+                Next
+            Next
+            ' |
+            For y = 1 To 4
+                For x = 1 To 7
+                    WhoWin = Connected(New Point(x, y), New Point(x, y + 1), New Point(x, y + 2), New Point(x, y + 3))
+                    If WhoWin <> Player.None Then Return WhoWin
+                Next
+            Next
+            ' \
+            For x = 1 To 4
+                For y = 1 To 4
+                    WhoWin = Connected(New Point(x, y), New Point(x + 1, y + 1), New Point(x + 2, y + 2), New Point(x + 3, y + 3))
+                    If WhoWin <> Player.None Then Return WhoWin
+                Next
+            Next
+            ' /
+            For x = 1 To 4
+                For y = 4 To 7
+                    WhoWin = Connected(New Point(x, y), New Point(x + 1, y - 1), New Point(x + 2, y - 2), New Point(x + 3, y - 3))
+                    If WhoWin <> Player.None Then Return WhoWin
+                Next
+            Next
+            Return Player.None
         End Function
         Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("○"c))
         Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("●"c))
         Protected ReadOnly Hi As New SpriteEntity(WriteEntities, New Sprite("5"c)) With {.Position = New Point(30, 5)}
         Protected ReadOnly GameField As New RectangleEntity(WriteEntities, GameArea)
+        Protected Sub DisplayWin()
+            Select Case WhoWin()
+                Case Player.Player
+                    Instructions.Text = "White wins!!"
+                    Instructions.Position = New Point(13, 0)
+                    Trigger.Dispose()
+                Case Player.CPU
+                    Instructions.Text = "Black wins!!"
+                    Instructions.Position = New Point(13, 0)
+                    Trigger.Dispose()
+            End Select
+        End Sub
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities,
                                                       New Rectangle(GameArea.Left - 3, GameArea.Top - 1,
                                                                     GameArea.Width + 6, GameArea.Height + 1),
@@ -637,12 +687,22 @@ Module SunnysBigAdventure
                                                           Select Case key
                                                               Case ConsoleKey.D1 To ConsoleKey.D7
                                                                   Dim i = key - ConsoleKey.D0
-                                                                  Whites.Create(New Point(
+                                                                  Whites.Add(New Point(
                                                                                 GameArea.Left + i * 2, GameArea.Top + 1))
+                                                              Case ConsoleKey.F1 To ConsoleKey.F7
+                                                                  Dim i = key - ConsoleKey.F1 + 1
+                                                                  Blacks.Add(New Point(
+                                                                                GameArea.Left + i * 2, GameArea.Top + 1))
+                                                              Case ConsoleKey.Enter
+                                                                  Whites.Clear()
+                                                                  Blacks.Clear()
                                                           End Select
                                                           Return True
                                                       End Function,
-            Sub() Instructions.Position = New Point(3, 0))
+            Sub()
+                Instructions.Position = New Point(3, 0)
+                AddHandler Tick, AddressOf DisplayWin
+            End Sub, Sub() RemoveHandler Tick, AddressOf DisplayWin)
         Protected ReadOnly Instructions As New TextEntity(WriteEntities, "Press 1~7 to add a piece. Connect 4 to win")
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
