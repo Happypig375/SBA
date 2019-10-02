@@ -504,6 +504,7 @@ Module SunnysBigAdventure
     Public ActiveEntity As PlayerEntity = Sunny
 #End Region
 #Region "Regions"
+    Dim _currentRegion As Region = New Region3_ConnectFour()
     MustInherit Class Region
         Implements IDisposable
         Sub New(Optional bedrock As Boolean = True)
@@ -534,7 +535,6 @@ Module SunnysBigAdventure
             Next
         End Sub
     End Class
-    Dim _currentRegion As Region = New Region3_ConnectFour()
     Public ReadOnly Property CurrentRegion As Region
         Get
             Return _currentRegion
@@ -622,6 +622,49 @@ Module SunnysBigAdventure
             CPU
         End Enum
         Protected ReadOnly GameArea As New Rectangle(8, 1, 17, 8)
+        Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("○"c))
+        Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("●"c))
+        Protected ReadOnly Hi As New SpriteEntity(WriteEntities, New Sprite("5"c)) With {.Position = New Point(30, 5)}
+        Protected ReadOnly GameField As New RectangleEntity(WriteEntities, GameArea)
+        Protected ReadOnly Trigger As New TriggerZone(WriteEntities,
+                                                      New Rectangle(GameArea.Left - 3, GameArea.Top - 1,
+                                                                    GameArea.Width + 6, GameArea.Height + 1),
+                                                      Function(key)
+                                                          Select Case key
+                                                              Case ConsoleKey.D1 To ConsoleKey.D7
+                                                                  Dim i = key - ConsoleKey.D0
+                                                                  Whites.Add(New Point(
+                                                                                GameArea.Left + i * 2, GameArea.Top + 1))
+                                                                  CPUTurn()
+                                                              Case ConsoleKey.F1 To ConsoleKey.F7
+                                                                  Dim i = key - ConsoleKey.F1 + 1
+                                                                  Blacks.Add(New Point(
+                                                                                GameArea.Left + i * 2, GameArea.Top + 1))
+                                                              Case ConsoleKey.Enter
+                                                                  Whites.Clear()
+                                                                  Blacks.Clear()
+                                                          End Select
+                                                          Return True
+                                                      End Function,
+            Sub()
+                Instructions.Position = New Point(3, 0)
+                AddHandler Tick, AddressOf OnTick
+            End Sub, Sub() RemoveHandler Tick, AddressOf OnTick)
+        Protected ReadOnly Instructions As New TextEntity(WriteEntities, "Press 1~7 to add a piece. Connect 4 to win")
+        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
+        Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
+        Protected Sub OnTick()
+            Select Case WhoWin()
+                Case Player.Player
+                    Instructions.Text = "White wins!!"
+                    Instructions.Position = New Point(13, 0)
+                    Trigger.Dispose()
+                Case Player.CPU
+                    Instructions.Text = "Black wins!!"
+                    Instructions.Position = New Point(13, 0)
+                    Trigger.Dispose()
+            End Select
+        End Sub
         Protected Function WhoWin() As Player
             Dim Connected = Function(p1 As Point, p2 As Point, p3 As Point, p4 As Point)
                                 Dim Matches =
@@ -664,48 +707,12 @@ Module SunnysBigAdventure
             Next
             Return Player.None
         End Function
-        Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("○"c))
-        Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("●"c))
-        Protected ReadOnly Hi As New SpriteEntity(WriteEntities, New Sprite("5"c)) With {.Position = New Point(30, 5)}
-        Protected ReadOnly GameField As New RectangleEntity(WriteEntities, GameArea)
-        Protected Sub DisplayWin()
-            Select Case WhoWin()
-                Case Player.Player
-                    Instructions.Text = "White wins!!"
-                    Instructions.Position = New Point(13, 0)
-                    Trigger.Dispose()
-                Case Player.CPU
-                    Instructions.Text = "Black wins!!"
-                    Instructions.Position = New Point(13, 0)
-                    Trigger.Dispose()
-            End Select
+        Sub CPUTurn()
+            ' 1. Black win
+            ' 2. Prevent white win
+            ' 3. Try to lengthen self
+
         End Sub
-        Protected ReadOnly Trigger As New TriggerZone(WriteEntities,
-                                                      New Rectangle(GameArea.Left - 3, GameArea.Top - 1,
-                                                                    GameArea.Width + 6, GameArea.Height + 1),
-                                                      Function(key)
-                                                          Select Case key
-                                                              Case ConsoleKey.D1 To ConsoleKey.D7
-                                                                  Dim i = key - ConsoleKey.D0
-                                                                  Whites.Add(New Point(
-                                                                                GameArea.Left + i * 2, GameArea.Top + 1))
-                                                              Case ConsoleKey.F1 To ConsoleKey.F7
-                                                                  Dim i = key - ConsoleKey.F1 + 1
-                                                                  Blacks.Add(New Point(
-                                                                                GameArea.Left + i * 2, GameArea.Top + 1))
-                                                              Case ConsoleKey.Enter
-                                                                  Whites.Clear()
-                                                                  Blacks.Clear()
-                                                          End Select
-                                                          Return True
-                                                      End Function,
-            Sub()
-                Instructions.Position = New Point(3, 0)
-                AddHandler Tick, AddressOf DisplayWin
-            End Sub, Sub() RemoveHandler Tick, AddressOf DisplayWin)
-        Protected ReadOnly Instructions As New TextEntity(WriteEntities, "Press 1~7 to add a piece. Connect 4 to win")
-        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
-        Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
     End Class
 #End Region
     Const WindowWidth = 48
