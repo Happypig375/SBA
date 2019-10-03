@@ -38,6 +38,12 @@ Module SunnysBigAdventure
             If Top > other.Top Then Return 1
             Return 0
         End Function
+        Public Shared Operator =(p1 As Point, p2 As Point) As Boolean
+            Return p1.Left = p2.Left AndAlso p1.Top = p2.Top
+        End Operator
+        Public Shared Operator <>(p1 As Point, p2 As Point) As Boolean
+            Return p1.Left <> p2.Left OrElse p1.Top <> p2.Top
+        End Operator
     End Structure
     Structure Rectangle
         Public Sub New(left As Integer, top As Integer, width As Integer, height As Integer)
@@ -133,6 +139,18 @@ Module SunnysBigAdventure
             Write(sprite.Display)
         End If
     End Sub
+    ReadOnly Random As New Random()
+    <Runtime.CompilerServices.Extension>
+    Sub Shuffle(Of T)(list As IList(Of T))
+        Dim n = list.Count
+        While n > 1
+            n -= 1
+            Dim k = Random.Next(n + 1)
+            Dim value = list(k)
+            list(k) = list(n)
+            list(n) = value
+        End While
+    End Sub
 #End Region
 #Region "Entity Classes"
     MustInherit Class Entity
@@ -152,7 +170,7 @@ Module SunnysBigAdventure
                 Dim newPosition = Position
                 For Each entity In CurrentRegion.Entities
                     If Me IsNot entity AndAlso entity.ForbidEntry(Me, rect) Then Return False
-                    If Not newPosition?.Equals(Position) Then Return False ' Position was set in ForbidEntry, already moved elsewhere
+                    If newPosition <> Position Then Return False ' Position was set in ForbidEntry, already moved elsewhere
                 Next
             End If
             Return True
@@ -183,7 +201,7 @@ Module SunnysBigAdventure
         Function Go(pointMap As Func(Of Point, Point)) As Boolean
             Return IfHasValue(Position, Function(point)
                                             Position = pointMap(point)
-                                            Return Not point.Equals(Position)
+                                            Return If(point <> Position, True)
                                         End Function, False)
         End Function
         Public Overridable Function GoUp() As Boolean
@@ -467,7 +485,7 @@ Module SunnysBigAdventure
         End Sub
         Public Function ItemAt(position As Point) As GravityEntity
             For Each item In Entities.OfType(Of GravityEntityFactoryEntity).Where(Function(e) e.Owner Is Me)
-                If item.Position?.Equals(position) Then Return item
+                If item.Position = position Then Return item
             Next
             Return Nothing
         End Function
@@ -636,11 +654,8 @@ Module SunnysBigAdventure
                                                                   Dim i = key - ConsoleKey.D0
                                                                   Whites.Add(New Point(
                                                                                 GameArea.Left + i * 2, GameArea.Top + 1))
-                                                                  CPUTurn()
-                                                              Case ConsoleKey.F1 To ConsoleKey.F7
-                                                                  Dim i = key - ConsoleKey.F1 + 1
                                                                   Blacks.Add(New Point(
-                                                                                GameArea.Left + i * 2, GameArea.Top + 1))
+                                                                                GameArea.Left + CPUTurn() * 2, GameArea.Top + 1))
                                                               Case ConsoleKey.Enter
                                                                   Whites.Clear()
                                                                   Blacks.Clear()
@@ -670,35 +685,38 @@ Module SunnysBigAdventure
             Dim Matches =
                 Function(side As GravityEntityFactory, point As Point, simulatePosition As Point?) _
                     side.ItemAt(New Point(GameArea.Left + point.Left * 2, GameArea.Top + point.Top))?.VerticalVelocity = 0 OrElse
-                    simulatePosition?.Equals(point)
-            Dim simulateCoordinates = IfHasValue(simulateCoordinatesOpt,
-                                                   Function(sim)
-                                                       Dim black As Point
-                                                       For y = 1 To 7
-                                                           If Matches(Whites, New Point(sim.blackX, 1), Nothing) OrElse
-                                                              Matches(Blacks, New Point(sim.blackX, 1), Nothing) Then
-                                                               black = New Point(sim.blackX, y - 1)
-                                                               GoTo returnBlack
-                                                           End If
-                                                       Next
-                                                       black = New Point(sim.blackX, 7)
-returnBlack:
-
-                                                       For y = 1 To 7
-                                                           If Matches(Whites, New Point(sim.whiteX, 1), Nothing) OrElse
-                                                              Matches(Blacks, New Point(sim.whiteX, 1), Nothing) OrElse
-                                                              sim.whi.Then Then _
-                                                               Return New Point(sim.blackX, y - 1)
-                                                       Next
-                                                       Return New Point(sim.blackX, 7)
-                                                   End Function)
+                    simulatePosition = point
+            Dim simulatePoints = IfHasValue(simulateCoordinatesOpt,
+                Function(sim)
+                    Dim black As Point
+                    For y = 1 To 7
+                        If Matches(Whites, New Point(sim.blackX, y), Nothing) OrElse
+                           Matches(Blacks, New Point(sim.blackX, y), Nothing) Then
+                            black = New Point(sim.blackX, y - 1)
+                            GoTo returnBlack
+                        End If
+                    Next
+                    black = New Point(sim.blackX, 7)
+returnBlack:        Return (black, white:=IfHasValue(sim.whiteX,
+                        Function(whiteX)
+                            For y = 1 To 7
+                                If Matches(Whites, New Point(whiteX, y), Nothing) OrElse
+                                   Matches(Blacks, New Point(whiteX, y), Nothing) OrElse
+                                   black = New Point(whiteX, y) Then _
+                                   Return New Point(whiteX, y - 1)
+                            Next
+                            Return New Point(whiteX, 7)
+                        End Function))
+                End Function)
             Dim Connected = Function(p1 As Point, p2 As Point, p3 As Point, p4 As Point)
-                                If Matches(Whites, p1, Nothing) AndAlso Matches(Whites, p2, Nothing) AndAlso
-                                   Matches(Whites, p3, Nothing) AndAlso Matches(Whites, p4, Nothing) Then Return Player.Player
-                                If Matches(Blacks, p1, simulateBlackPosition) AndAlso
-                                   Matches(Blacks, p2, simulateBlackPosition) AndAlso
-                                   Matches(Blacks, p3, simulateBlackPosition) AndAlso
-                                   Matches(Blacks, p4, simulateBlackPosition) Then Return Player.CPU
+                                If Matches(Whites, p1, simulatePoints?.white) AndAlso
+                                   Matches(Whites, p2, simulatePoints?.white) AndAlso
+                                   Matches(Whites, p3, simulatePoints?.white) AndAlso
+                                   Matches(Whites, p4, simulatePoints?.white) Then Return Player.Player
+                                If Matches(Blacks, p1, simulatePoints?.black) AndAlso
+                                   Matches(Blacks, p2, simulatePoints?.black) AndAlso
+                                   Matches(Blacks, p3, simulatePoints?.black) AndAlso
+                                   Matches(Blacks, p4, simulatePoints?.black) Then Return Player.CPU
                                 Return Player.None
                             End Function
             ' -
@@ -731,11 +749,20 @@ returnBlack:
             Next
             Return Player.None
         End Function
-        Sub CPUTurn()
+        Function CPUTurn() As Integer
             ' 1. Black win
+            For x = 1 To 7
+                If WhoWin((x, Nothing)) = Player.CPU Then Return x
+            Next
             ' 2. Prevent white win
-            ' 3. Try to lengthen self
-        End Sub
+            For x = 1 To 7
+                For x2 = 1 To 7
+                    If WhoWin((x, x2)) = Player.Player Then Return x
+                Next
+            Next
+            ' 3. Random placement
+            Dim choices = New List((1, 7))
+        End Function
     End Class
 #End Region
     Const WindowWidth = 48
