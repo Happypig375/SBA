@@ -489,7 +489,8 @@ Module SunnysBigAdventure
     '10.    // ₿
     Const Empty = " "c
     ReadOnly Empty_ As New Sprite(Empty)
-    ReadOnly GlobalEntities As New List(Of Entity)
+    ReadOnly GlobalEntities As New HashSet(Of Entity)
+
     Public ReadOnly Sunny_ As New Sprite("☺"c)
     Public ReadOnly Sunny_Angry As New Sprite("☹"c, ConsoleColor.Red)
     Public ReadOnly Sunny As New PlayerEntity(GlobalEntities, Sunny_)
@@ -654,7 +655,7 @@ Module SunnysBigAdventure
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
         Protected Sub OnTick()
-            Select Case WhoWin()
+            Select Case WhoWin(Nothing)
                 Case Player.Player
                     Instructions.Text = "White wins!!"
                     Instructions.Position = New Point(13, 0)
@@ -665,16 +666,39 @@ Module SunnysBigAdventure
                     Trigger.Dispose()
             End Select
         End Sub
-        Protected Function WhoWin() As Player
+        Protected Function WhoWin(simulateCoordinatesOpt As (blackX As Integer, whiteX As Integer?)?) As Player
+            Dim Matches =
+                Function(side As GravityEntityFactory, point As Point, simulatePosition As Point?) _
+                    side.ItemAt(New Point(GameArea.Left + point.Left * 2, GameArea.Top + point.Top))?.VerticalVelocity = 0 OrElse
+                    simulatePosition?.Equals(point)
+            Dim simulateCoordinates = IfHasValue(simulateCoordinatesOpt,
+                                                   Function(sim)
+                                                       Dim black As Point
+                                                       For y = 1 To 7
+                                                           If Matches(Whites, New Point(sim.blackX, 1), Nothing) OrElse
+                                                              Matches(Blacks, New Point(sim.blackX, 1), Nothing) Then
+                                                               black = New Point(sim.blackX, y - 1)
+                                                               GoTo returnBlack
+                                                           End If
+                                                       Next
+                                                       black = New Point(sim.blackX, 7)
+returnBlack:
+
+                                                       For y = 1 To 7
+                                                           If Matches(Whites, New Point(sim.whiteX, 1), Nothing) OrElse
+                                                              Matches(Blacks, New Point(sim.whiteX, 1), Nothing) OrElse
+                                                              sim.whi.Then Then _
+                                                               Return New Point(sim.blackX, y - 1)
+                                                       Next
+                                                       Return New Point(sim.blackX, 7)
+                                                   End Function)
             Dim Connected = Function(p1 As Point, p2 As Point, p3 As Point, p4 As Point)
-                                Dim Matches =
-                                    Function(side As GravityEntityFactory, point As Point) _
-                                        side.ItemAt(New Point(GameArea.Left + point.Left * 2, GameArea.Top + point.Top)) _
-                                        ?.VerticalVelocity = 0
-                                If Matches(Whites, p1) AndAlso Matches(Whites, p2) AndAlso
-                                   Matches(Whites, p3) AndAlso Matches(Whites, p4) Then Return Player.Player
-                                If Matches(Blacks, p1) AndAlso Matches(Blacks, p2) AndAlso
-                                   Matches(Blacks, p3) AndAlso Matches(Blacks, p4) Then Return Player.CPU
+                                If Matches(Whites, p1, Nothing) AndAlso Matches(Whites, p2, Nothing) AndAlso
+                                   Matches(Whites, p3, Nothing) AndAlso Matches(Whites, p4, Nothing) Then Return Player.Player
+                                If Matches(Blacks, p1, simulateBlackPosition) AndAlso
+                                   Matches(Blacks, p2, simulateBlackPosition) AndAlso
+                                   Matches(Blacks, p3, simulateBlackPosition) AndAlso
+                                   Matches(Blacks, p4, simulateBlackPosition) Then Return Player.CPU
                                 Return Player.None
                             End Function
             ' -
@@ -711,7 +735,6 @@ Module SunnysBigAdventure
             ' 1. Black win
             ' 2. Prevent white win
             ' 3. Try to lengthen self
-
         End Sub
     End Class
 #End Region
