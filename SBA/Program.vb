@@ -141,16 +141,10 @@ Module SunnysBigAdventure
     End Sub
     ReadOnly Random As New Random()
     <Runtime.CompilerServices.Extension>
-    Sub Shuffle(Of T)(list As IList(Of T))
-        Dim n = list.Count
-        While n > 1
-            n -= 1
-            Dim k = Random.Next(n + 1)
-            Dim value = list(k)
-            list(k) = list(n)
-            list(n) = value
-        End While
-    End Sub
+    Function PopRandom(Of T)(list As ICollection(Of T)) As T
+        PopRandom = list.ElementAt(Random.Next(list.Count))
+        list.Remove(PopRandom)
+    End Function
 #End Region
 #Region "Entity Classes"
     MustInherit Class Entity
@@ -192,7 +186,6 @@ Module SunnysBigAdventure
                 Return Bounds?.TopLeft
             End Get
             Set(value As Point?)
-                Debug.WriteLineIf(TypeOf Me Is PlayerEntity, $"Player Position = {value}")
                 Bounds = IfHasValue(value, AddressOf BoundsForNewPoint)
             End Set
         End Property
@@ -356,7 +349,6 @@ Module SunnysBigAdventure
         Protected Overloads Sub RedrawAt(bounds As Delta(Of Rectangle?), text As Delta(Of String))
             IfHasValue(bounds.OldValue, Sub(point)
                                             ResetColor()
-                                            Debug.WriteLine("Pos: {0}", CursorPosition)
                                             CursorPosition = point.TopLeft
                                             For i = 1 To text.OldValue.Length
                                                 Write(Empty)
@@ -403,6 +395,7 @@ Module SunnysBigAdventure
             AddHandler Tick, AddressOf WhenTick
         End Sub
         Public Property VerticalVelocity As Integer
+        Public Event GroundHit()
         Sub WhenTick()
             If VerticalVelocity > 0 Then
                 MyBase.GoUp()
@@ -411,6 +404,8 @@ Module SunnysBigAdventure
                 VerticalVelocity -= 1
             Else
                 VerticalVelocity = 0
+                RaiseEvent GroundHit()
+                GroundHitEvent = Nothing
             End If
         End Sub
         Public Overrides Function GoUp() As Boolean
@@ -462,9 +457,12 @@ Module SunnysBigAdventure
         Private Class GravityEntityFactoryEntity
             Inherits GravityEntity
             Friend Owner As GravityEntityFactory
-            Public Sub New(entities As ICollection(Of Entity), sprite As Sprite, owner As GravityEntityFactory)
+            Public Sub New(entities As ICollection(Of Entity), sprite As Sprite,
+                           owner As GravityEntityFactory, position As Point?, onHitGround As GroundHitEventHandler)
                 MyBase.New(entities, sprite)
                 Me.Owner = owner
+                Me.Position = position
+                If onHitGround IsNot Nothing Then AddHandler GroundHit, onHitGround
             End Sub
         End Class
         Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
@@ -474,8 +472,8 @@ Module SunnysBigAdventure
         ReadOnly Sprite As Sprite
         ReadOnly Entities As ICollection(Of Entity)
         Public Property Template As Sprite
-        Public Sub Add(position As Point?)
-            Entities.Add(New GravityEntityFactoryEntity(Entities, Sprite, Me) With {.Position = position})
+        Public Sub Add(position As Point?, Optional onHitGround As GravityEntity.GroundHitEventHandler = Nothing)
+            Entities.Add(New GravityEntityFactoryEntity(Entities, Sprite, Me, position, onHitGround))
         End Sub
         Public Sub Clear()
             For Each item In Entities.OfType(Of GravityEntityFactoryEntity).Where(Function(e) e.Owner Is Me)
@@ -645,23 +643,25 @@ Module SunnysBigAdventure
         Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("●"c))
         Protected ReadOnly Hi As New SpriteEntity(WriteEntities, New Sprite("5"c)) With {.Position = New Point(30, 5)}
         Protected ReadOnly GameField As New RectangleEntity(WriteEntities, GameArea)
+        Protected WaitingForCPU As Boolean = False
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities,
-                                                      New Rectangle(GameArea.Left - 3, GameArea.Top - 1,
-                                                                    GameArea.Width + 6, GameArea.Height + 1),
-                                                      Function(key)
-                                                          Select Case key
-                                                              Case ConsoleKey.D1 To ConsoleKey.D7
-                                                                  Dim i = key - ConsoleKey.D0
-                                                                  Whites.Add(New Point(
-                                                                                GameArea.Left + i * 2, GameArea.Top + 1))
-                                                                  Blacks.Add(New Point(
-                                                                                GameArea.Left + CPUTurn() * 2, GameArea.Top + 1))
-                                                              Case ConsoleKey.Enter
-                                                                  Whites.Clear()
-                                                                  Blacks.Clear()
-                                                          End Select
-                                                          Return True
-                                                      End Function,
+            New Rectangle(GameArea.Left - 3, GameArea.Top - 1, GameArea.Width + 6, GameArea.Height + 1),
+            Function(key)
+                If Not WaitingForCPU Then
+                    Select Case key
+                        Case ConsoleKey.D1 To ConsoleKey.D7
+                            Dim i = key - ConsoleKey.D0
+                            If Not Entities.Any(Function(e) If(e.Position = New Point(GameArea.Left + i * 2, GameArea.Top + 1), False)) Then
+                                Whites.Add(New Point(GameArea.Left + i * 2, GameArea.Top + 1), AddressOf OnCPUTick)
+                                WaitingForCPU = True
+                            End If
+                        Case ConsoleKey.Enter
+                                Whites.Clear()
+                                Blacks.Clear()
+                    End Select
+                End If
+                Return True
+            End Function,
             Sub()
                 Instructions.Position = New Point(3, 0)
                 AddHandler Tick, AddressOf OnTick
@@ -681,42 +681,40 @@ Module SunnysBigAdventure
                     Trigger.Dispose()
             End Select
         End Sub
-        Protected Function WhoWin(simulateCoordinatesOpt As (blackX As Integer, whiteX As Integer?)?) As Player
+        Protected Function WhoWin(simulateCoordinatesOpt As (blackX As Integer?, whiteX As Integer?)) As Player
             Dim Matches =
                 Function(side As GravityEntityFactory, point As Point, simulatePosition As Point?) _
-                    side.ItemAt(New Point(GameArea.Left + point.Left * 2, GameArea.Top + point.Top))?.VerticalVelocity = 0 OrElse
+                    side.ItemAt(New Point(GameArea.Left + point.Left * 2, GameArea.Top + point.Top - 1))?.VerticalVelocity = 0 OrElse
                     simulatePosition = point
-            Dim simulatePoints = IfHasValue(simulateCoordinatesOpt,
-                Function(sim)
-                    Dim black As Point
+            Dim black = IfHasValue(simulateCoordinatesOpt.blackX,
+                Function(blackX)
                     For y = 1 To 7
-                        If Matches(Whites, New Point(sim.blackX, y), Nothing) OrElse
-                           Matches(Blacks, New Point(sim.blackX, y), Nothing) Then
-                            black = New Point(sim.blackX, y - 1)
-                            GoTo returnBlack
+                        If Matches(Whites, New Point(blackX, y), Nothing) OrElse
+                           Matches(Blacks, New Point(blackX, y), Nothing) Then
+                            Return New Point(blackX, If(y = 1, 1, y - 1))
                         End If
                     Next
-                    black = New Point(sim.blackX, 7)
-returnBlack:        Return (black, white:=IfHasValue(sim.whiteX,
+                    Return New Point(blackX, 7)
+                End Function)
+            Dim white = IfHasValue(simulateCoordinatesOpt.whiteX,
                         Function(whiteX)
                             For y = 1 To 7
                                 If Matches(Whites, New Point(whiteX, y), Nothing) OrElse
                                    Matches(Blacks, New Point(whiteX, y), Nothing) OrElse
                                    black = New Point(whiteX, y) Then _
-                                   Return New Point(whiteX, y - 1)
+                                   Return New Point(whiteX, If(y = 1, 1, y - 1))
                             Next
                             Return New Point(whiteX, 7)
-                        End Function))
-                End Function)
+                        End Function)
             Dim Connected = Function(p1 As Point, p2 As Point, p3 As Point, p4 As Point)
-                                If Matches(Whites, p1, simulatePoints?.white) AndAlso
-                                   Matches(Whites, p2, simulatePoints?.white) AndAlso
-                                   Matches(Whites, p3, simulatePoints?.white) AndAlso
-                                   Matches(Whites, p4, simulatePoints?.white) Then Return Player.Player
-                                If Matches(Blacks, p1, simulatePoints?.black) AndAlso
-                                   Matches(Blacks, p2, simulatePoints?.black) AndAlso
-                                   Matches(Blacks, p3, simulatePoints?.black) AndAlso
-                                   Matches(Blacks, p4, simulatePoints?.black) Then Return Player.CPU
+                                If Matches(Whites, p1, white) AndAlso
+                                   Matches(Whites, p2, white) AndAlso
+                                   Matches(Whites, p3, white) AndAlso
+                                   Matches(Whites, p4, white) Then Return Player.Player
+                                If Matches(Blacks, p1, black) AndAlso
+                                   Matches(Blacks, p2, black) AndAlso
+                                   Matches(Blacks, p3, black) AndAlso
+                                   Matches(Blacks, p4, black) Then Return Player.CPU
                                 Return Player.None
                             End Function
             ' -
@@ -749,19 +747,34 @@ returnBlack:        Return (black, white:=IfHasValue(sim.whiteX,
             Next
             Return Player.None
         End Function
+        Sub OnCPUTick()
+            Blacks.Add(New Point(GameArea.Left + CPUTurn() * 2, GameArea.Top + 1))
+            RemoveHandler Tick, AddressOf OnCPUTick
+            WaitingForCPU = False
+        End Sub
         Function CPUTurn() As Integer
+            Dim choices = Enumerable.Range(1, 7).Where(Function(x) _
+                   If(Not (Whites.ItemAt(New Point(GameArea.Left + x * 2, GameArea.Top + 1))?.VerticalVelocity = 0 OrElse
+                           Blacks.ItemAt(New Point(GameArea.Left + x * 2, GameArea.Top + 1))?.VerticalVelocity = 0), True)).ToHashSet()
             ' 1. Black win
             For x = 1 To 7
                 If WhoWin((x, Nothing)) = Player.CPU Then Return x
             Next
             ' 2. Prevent white win
             For x = 1 To 7
+                If WhoWin((Nothing, x)) = Player.Player Then Return x
+            Next
+            For x = 1 To 7
                 For x2 = 1 To 7
-                    If WhoWin((x, x2)) = Player.Player Then Return x
+                    If WhoWin((x, x2)) = Player.Player Then choices.Remove(x) : Debug.WriteLine("Removed x={0} x2={1}", x, x2)
                 Next
             Next
-            ' 3. Random placement
-            Dim choices = New List((1, 7))
+decide:     ' 3. Random placement
+            Select Case choices.Count
+                Case 0 : Return Random.Next(1, 7)
+                Case 1 : Return choices.First()
+                Case Else : Return choices.PopRandom()
+            End Select
         End Function
     End Class
 #End Region
