@@ -521,7 +521,7 @@ Module SunnysBigAdventure
     Public ActiveEntity As PlayerEntity = Sunny
 #End Region
 #Region "Regions"
-    Dim _currentRegion As Region = New Region3_ConnectFour()
+    Dim _currentRegion As Region = New Region1_Title()
     MustInherit Class Region
         Implements IDisposable
         Sub New(Optional bedrock As Boolean = True)
