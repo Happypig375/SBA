@@ -454,7 +454,7 @@ Module SunnysBigAdventure
         End Function
     End Class
     Class GravityEntityFactory
-        Private Class GravityEntityFactoryEntity
+        Class GravityEntityFactoryEntity
             Inherits GravityEntity
             Friend Owner As GravityEntityFactory
             Public Sub New(entities As ICollection(Of Entity), sprite As Sprite,
@@ -521,7 +521,7 @@ Module SunnysBigAdventure
     Public ActiveEntity As PlayerEntity = Sunny
 #End Region
 #Region "Regions"
-    Dim _currentRegion As Region = New Region1_Title()
+    Dim _currentRegion As Region = New Region3_ConnectFour()
     MustInherit Class Region
         Implements IDisposable
         Sub New(Optional bedrock As Boolean = True)
@@ -595,6 +595,9 @@ Module SunnysBigAdventure
                                                           Select Case key
                                                               Case ConsoleKey.D0 To ConsoleKey.D9
                                                                   Input.Text &= key.ToString()(1)
+                                                              Case ConsoleKey.Backspace
+                                                                  If Input.Text <> "Input: " Then _
+                                                                      Input.Text = Input.Text.Substring(0, Input.Text.Length - 1)
                                                               Case ConsoleKey.Enter
                                                                   Dim inputNumber As Byte
                                                                   If Byte.TryParse(String.Concat(Input.Text.SkipWhile(Function(c) Not Char.IsDigit(c))),
@@ -683,15 +686,24 @@ Module SunnysBigAdventure
         End Sub
         Protected Function WhoWin(simulateCoordinatesOpt As (blackX As Integer?, whiteX As Integer?)) As Player
             Dim Matches =
-                Function(side As GravityEntityFactory, point As Point, simulatePosition As Point?) _
-                    side.ItemAt(New Point(GameArea.Left + point.Left * 2, GameArea.Top + point.Top - 1))?.VerticalVelocity = 0 OrElse
-                    simulatePosition = point
+                Function(side As GravityEntityFactory, point As Point, simulatePosition As Point?)
+                    Dim occupier As GravityEntityFactory.GravityEntityFactoryEntity = Nothing
+                    For Each item In Entities.OfType(Of GravityEntityFactory.GravityEntityFactoryEntity)
+                        If item.Position = New Point(GameArea.Left + point.Left * 2, GameArea.Top - 1 + point.Top) Then
+                            occupier = item
+                            Exit For
+                        End If
+                    Next
+                    Return If(occupier IsNot Nothing,
+                        occupier.Owner Is side AndAlso occupier.VerticalVelocity = 0,
+                        point = simulatePosition)
+                End Function
             Dim black = IfHasValue(simulateCoordinatesOpt.blackX,
                 Function(blackX)
                     For y = 1 To 7
                         If Matches(Whites, New Point(blackX, y), Nothing) OrElse
                            Matches(Blacks, New Point(blackX, y), Nothing) Then
-                            Return New Point(blackX, If(y = 1, 1, y - 1))
+                            Return New Point(blackX, GameArea.Top + If(y = 1, 1, y - 1))
                         End If
                     Next
                     Return New Point(blackX, 7)
@@ -702,7 +714,7 @@ Module SunnysBigAdventure
                                 If Matches(Whites, New Point(whiteX, y), Nothing) OrElse
                                    Matches(Blacks, New Point(whiteX, y), Nothing) OrElse
                                    black = New Point(whiteX, y) Then _
-                                   Return New Point(whiteX, If(y = 1, 1, y - 1))
+                                   Return New Point(whiteX, GameArea.Top + If(y = 1, 1, y - 1))
                             Next
                             Return New Point(whiteX, 7)
                         End Function)
