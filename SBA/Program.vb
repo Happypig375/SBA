@@ -141,9 +141,8 @@ Module SunnysBigAdventure
     End Sub
     ReadOnly Random As New Random()
     <Runtime.CompilerServices.Extension>
-    Function PopRandom(Of T)(list As ICollection(Of T)) As T
-        PopRandom = list.ElementAt(Random.Next(list.Count))
-        list.Remove(PopRandom)
+    Function RandomItem(Of T)(list As ICollection(Of T)) As T
+        Return list.ElementAt(Random.Next(list.Count))
     End Function
 #End Region
 #Region "Entity Classes"
@@ -659,8 +658,8 @@ Module SunnysBigAdventure
                                 WaitingForCPU = True
                             End If
                         Case ConsoleKey.Enter
-                                Whites.Clear()
-                                Blacks.Clear()
+                            Whites.Clear()
+                            Blacks.Clear()
                     End Select
                 End If
                 Return True
@@ -703,7 +702,7 @@ Module SunnysBigAdventure
                     For y = 1 To 7
                         If Matches(Whites, New Point(blackX, y), Nothing) OrElse
                            Matches(Blacks, New Point(blackX, y), Nothing) Then
-                            Return New Point(blackX, GameArea.Top + If(y = 1, 1, y - 1))
+                            Return New Point(blackX, If(y = 1, 1, y - 1))
                         End If
                     Next
                     Return New Point(blackX, 7)
@@ -714,7 +713,7 @@ Module SunnysBigAdventure
                                 If Matches(Whites, New Point(whiteX, y), Nothing) OrElse
                                    Matches(Blacks, New Point(whiteX, y), Nothing) OrElse
                                    black = New Point(whiteX, y) Then _
-                                   Return New Point(whiteX, GameArea.Top + If(y = 1, 1, y - 1))
+                                   Return New Point(whiteX, If(y = 1, 1, y - 1))
                             Next
                             Return New Point(whiteX, 7)
                         End Function)
@@ -760,33 +759,39 @@ Module SunnysBigAdventure
             Return Player.None
         End Function
         Sub OnCPUTick()
-            Blacks.Add(New Point(GameArea.Left + CPUTurn() * 2, GameArea.Top + 1))
+            Dim cpu = CPUTurn()
+            If cpu IsNot Nothing Then
+                Blacks.Add(New Point(GameArea.Left + cpu.GetValueOrDefault() * 2, GameArea.Top + 1))
+            Else
+                Instructions.Text = "Stalemate. Press Enter to restart."
+                Instructions.Position = New Point(3, 0)
+            End If
             RemoveHandler Tick, AddressOf OnCPUTick
             WaitingForCPU = False
         End Sub
-        Function CPUTurn() As Integer
+        Function CPUTurn() As Integer?
             Dim choices = Enumerable.Range(1, 7).Where(Function(x) _
                    If(Not (Whites.ItemAt(New Point(GameArea.Left + x * 2, GameArea.Top + 1))?.VerticalVelocity = 0 OrElse
                            Blacks.ItemAt(New Point(GameArea.Left + x * 2, GameArea.Top + 1))?.VerticalVelocity = 0), True)).ToHashSet()
+            Dim avoidChoices = New HashSet(Of Integer)()
             ' 1. Black win
-            For x = 1 To 7
+            For Each x In choices
                 If WhoWin((x, Nothing)) = Player.CPU Then Return x
             Next
-            ' 2. Prevent white win
-            For x = 1 To 7
+            ' 2. Block white win
+            For Each x In choices
                 If WhoWin((Nothing, x)) = Player.Player Then Return x
             Next
-            For x = 1 To 7
-                For x2 = 1 To 7
-                    If WhoWin((x, x2)) = Player.Player Then choices.Remove(x) : Debug.WriteLine("Removed x={0} x2={1}", x, x2)
+            ' 3. Avoid white win
+            For Each x In choices
+                For Each x2 In choices
+                    If WhoWin((x, x2)) = Player.Player Then avoidChoices.Add(x) : Debug.WriteLine("Removed x={0} x2={1}", x, x2)
                 Next
             Next
-decide:     ' 3. Random placement
-            Select Case choices.Count
-                Case 0 : Return Random.Next(1, 7)
-                Case 1 : Return choices.First()
-                Case Else : Return choices.PopRandom()
-            End Select
+            ' 4. Random placement
+            choices.ExceptWith(avoidChoices)
+            Return If(choices.Count > 0, choices.RandomItem(),
+                   If(avoidChoices.Count > 0, avoidChoices.RandomItem(), New Integer?()))
         End Function
     End Class
 #End Region
