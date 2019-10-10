@@ -674,11 +674,11 @@ Module SunnysBigAdventure
         Protected Sub OnTick()
             Select Case WhoWin(Nothing)
                 Case Player.Player
-                    Instructions.Text = "White wins!!"
+                    Instructions.Text = "You win!"
                     Instructions.Position = New Point(13, 0)
                     Trigger.Dispose()
                 Case Player.CPU
-                    Instructions.Text = "Black wins!!"
+                    Instructions.Text = "CPU wins!"
                     Instructions.Position = New Point(13, 0)
                     Trigger.Dispose()
             End Select
