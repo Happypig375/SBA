@@ -520,7 +520,7 @@ Module SunnysBigAdventure
     Public ActiveEntity As PlayerEntity = Sunny
 #End Region
 #Region "Regions"
-    Dim _currentRegion As Region = New Region3_ConnectFour()
+    Dim _currentRegion As Region = New Region3_CodeCrack()
     MustInherit Class Region
         Implements IDisposable
         Sub New(Optional bedrock As Boolean = True)
@@ -583,7 +583,7 @@ Module SunnysBigAdventure
     End Class
     Class Region2_NumberGuess
         Inherits Region
-        Protected Passcode As Byte = CByte(New Random().Next(101))
+        Protected Passcode As Byte = CByte(Random.Next(101))
         Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct")
         Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~100)")
         Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: I must guess it...")
@@ -631,9 +631,71 @@ Module SunnysBigAdventure
                                                           Input.Position = New Point(0, 3)
                                                       End Sub)
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region1_Title()
-        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region3_ConnectFour()
+        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region3_CodeCrack()
     End Class
-    Class Region3_ConnectFour
+    Class Region3_CodeCrack
+        Inherits Region
+        Protected Passcode As Short = CShort(Random.Next(10000))
+        Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct")
+        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~100)")
+        Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: Oh no! This barrier has limited tries!")
+        Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
+        Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8))
+        Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 6, 6, 3),
+                                                      Function(key)
+                                                          Select Case key
+                                                              Case ConsoleKey.D0 To ConsoleKey.D9
+                                                                  Input.Text &= key.ToString()(1)
+                                                              Case ConsoleKey.Backspace
+                                                                  If Input.Text <> "Input: " Then _
+                                                                      Input.Text = Input.Text.Substring(0, Input.Text.Length - 1)
+                                                              Case ConsoleKey.Enter
+                                                                  Dim inputNumber As Short
+                                                                  If Short.TryParse(String.Concat(Input.Text.SkipWhile(Function(c) Not Char.IsDigit(c))),
+                                                                                      inputNumber) Then
+                                                                      Select Case inputNumber
+                                                                          Case Is < Passcode
+                                                                              Instruction3.Text = "Sunny: The input is too small..."
+                                                                          Case Is > Passcode
+                                                                              Instruction3.Text = "Sunny: The input is too large..."
+                                                                          Case Else
+                                                                              Instruction3.Text = "Sunny: Yes! The passcode is correct!"
+                                                                              Instruction.Dispose()
+                                                                              Instruction2.Dispose()
+                                                                              Input.Dispose()
+                                                                              Barrier.Dispose()
+                                                                              Trigger.Dispose()
+                                                                      End Select
+                                                                  Else
+                                                                      Instruction3.Text = "Sunny: The input is too large..." ' inputNumber > 255
+                                                                  End If
+                                                                  Input.Text = "Input: "
+                                                          End Select
+                                                          Return True
+                                                      End Function,
+                                                      Sub()
+                                                          Instruction.Position = New Point(10, 0)
+                                                          Threading.Thread.Sleep(500)
+                                                          Instruction2.Position = New Point(10, 1)
+                                                          Threading.Thread.Sleep(500)
+                                                          Instruction3.Position = New Point(0, 2)
+                                                          Threading.Thread.Sleep(500)
+                                                          Input.Position = New Point(0, 3)
+                                                      End Sub)
+        Enum Matches
+            Wrong
+            CorrectNum
+            CorrectNumPos
+        End Enum
+        Function Matches(guess As Short, actual As Short) As (Matches, Matches, Matches, Matches)
+            Dim correctNumPosCount = guess.ToString().Zip(actual.ToString(), Function(g, a) g = a).Count(Function(b) b)
+            Dim correctPosCount = guess.ToString().SelectMany(Function(x, i) actual.ToString().Skip(i + 1),
+                                                              AddressOf ValueTuple.Create).Where(Function(t) t.Item1 <> t.Item2)
+        End Function
+        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
+        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region4_ConnectFour()
+    End Class
+    Class Region4_ConnectFour
         Inherits Region
         Enum Player
             None
@@ -669,7 +731,7 @@ Module SunnysBigAdventure
                 AddHandler Tick, AddressOf OnTick
             End Sub, Sub() RemoveHandler Tick, AddressOf OnTick)
         Protected ReadOnly Instructions As New TextEntity(WriteEntities, "Press 1~7 to add a piece. Connect 4 to win")
-        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
+        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region3_CodeCrack()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
         Protected Sub OnTick()
             Select Case WhoWin(Nothing)
