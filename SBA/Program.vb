@@ -585,7 +585,7 @@ Module SunnysBigAdventure
         Inherits Region
         Protected Passcode As Byte = CByte(Random.Next(101))
         Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct")
-        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~100)")
+        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~9999)")
         Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: I must guess it...")
         Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
         Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8))
@@ -637,60 +637,60 @@ Module SunnysBigAdventure
         Inherits Region
         Protected Passcode As Short = CShort(Random.Next(10000))
         Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct")
-        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~100)")
-        Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: Oh no! This barrier has limited tries!")
+        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~9999)")
+        Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: Oh no! This only allows 12 tries!")
         Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
         Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8))
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 6, 6, 3),
-                                                      Function(key)
-                                                          Select Case key
-                                                              Case ConsoleKey.D0 To ConsoleKey.D9
-                                                                  Input.Text &= key.ToString()(1)
-                                                              Case ConsoleKey.Backspace
-                                                                  If Input.Text <> "Input: " Then _
-                                                                      Input.Text = Input.Text.Substring(0, Input.Text.Length - 1)
-                                                              Case ConsoleKey.Enter
-                                                                  Dim inputNumber As Short
-                                                                  If Short.TryParse(String.Concat(Input.Text.SkipWhile(Function(c) Not Char.IsDigit(c))),
-                                                                                      inputNumber) Then
-                                                                      Select Case inputNumber
-                                                                          Case Is < Passcode
-                                                                              Instruction3.Text = "Sunny: The input is too small..."
-                                                                          Case Is > Passcode
-                                                                              Instruction3.Text = "Sunny: The input is too large..."
-                                                                          Case Else
-                                                                              Instruction3.Text = "Sunny: Yes! The passcode is correct!"
-                                                                              Instruction.Dispose()
-                                                                              Instruction2.Dispose()
-                                                                              Input.Dispose()
-                                                                              Barrier.Dispose()
-                                                                              Trigger.Dispose()
-                                                                      End Select
-                                                                  Else
-                                                                      Instruction3.Text = "Sunny: The input is too large..." ' inputNumber > 255
-                                                                  End If
-                                                                  Input.Text = "Input: "
-                                                          End Select
-                                                          Return True
-                                                      End Function,
-                                                      Sub()
-                                                          Instruction.Position = New Point(10, 0)
-                                                          Threading.Thread.Sleep(500)
-                                                          Instruction2.Position = New Point(10, 1)
-                                                          Threading.Thread.Sleep(500)
-                                                          Instruction3.Position = New Point(0, 2)
-                                                          Threading.Thread.Sleep(500)
-                                                          Input.Position = New Point(0, 3)
-                                                      End Sub)
-        Enum Matches
-            Wrong
-            CorrectNum
-            CorrectNumPos
-        End Enum
-        Function Matches(guess As Short, actual As Short) As (Matches, Matches, Matches, Matches)
-            Dim correctNumPosCount = guess.ToString().Zip(actual.ToString(), Function(g, a) g = a).Count(Function(b) b)
-            Dim correctPosCount = guess.ToString().SelectMany(Function(x, i) actual.ToString().Skip(i + 1),
-                                                              AddressOf ValueTuple.Create).Where(Function(t) t.Item1 <> t.Item2)
+        Function(key)
+            Select Case key
+                Case ConsoleKey.D0 To ConsoleKey.D9
+                    If Input.Text.Length < "Input: 9999".Length Then Input.Text &= key.ToString()(1)
+                Case ConsoleKey.Backspace
+                    If Input.Text <> "Input: " Then _
+                        Input.Text = Input.Text.Substring(0, Input.Text.Length - 1)
+                Case ConsoleKey.Enter
+                    Dim inputNumber = Short.Parse(String.Concat(
+                                    Input.Text.SkipWhile(Function(c) Not Char.IsDigit(c))))
+                    Dim t = Matches(inputNumber, Passcode)
+                    Dim p = NextPosition()
+                    If t.CorrectNumPos = 4 Then
+                        Barrier.Dispose()
+                        Input.Text = "Gate open!"
+                        Trigger.Dispose()
+                    ElseIf p.HasValue Then
+                        Input.Text = "Input: "
+                        Dim e As New TextEntity(WriteEntities, String.Concat(inputNumber,
+                            " ", New String("+"c, t.CorrectNumPos), New String("-"c, t.CorrectNum)), p)
+                    Else
+                        Input.Text = "Gate locked."
+                        ActiveEntity.Sprite = Sunny_Angry
+                    End If
+            End Select
+            Return True
+        End Function,
+        Sub()
+            Instruction.Position = New Point(10, 0)
+            Threading.Thread.Sleep(500)
+            Instruction2.Position = New Point(10, 1)
+            Threading.Thread.Sleep(500)
+            Instruction3.Position = New Point(0, 2)
+            Threading.Thread.Sleep(500)
+            Input.Position = New Point(0, 3)
+        End Sub)
+        Function Matches(guess As Short, actual As Short) As (CorrectNumPos As Integer, CorrectNum As Integer)
+            Dim g = guess.ToString()
+            Dim a = actual.ToString()
+            Dim correctNumPosCount = g.Zip(a, Function(gc, ac) gc = ac).Count(Function(b) b)
+            Dim correctNumCount = g.SelectMany(Function(gc) a, Function(gc, ac) gc = ac).Count(Function(b) b) - correctNumPosCount
+            Return (correctNumPosCount, correctNumCount)
+        End Function
+        Protected NextPositionStore As New Point(12, 3)
+        Function NextPosition() As Point?
+            Dim p As New Point(NextPositionStore.Left, NextPositionStore.Top + 1)
+            If p.Top = 7 Then If p.Left = 12 + 2 * 10 Then NextPosition = Nothing _
+                              Else NextPosition = New Point(p.Left + 10, 3) Else NextPosition = p
+            NextPositionStore = p
         End Function
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region4_ConnectFour()
