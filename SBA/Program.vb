@@ -636,8 +636,8 @@ Module SunnysBigAdventure
     Class Region3_CodeCrack
         Inherits Region
         Protected Passcode As Short = CShort(Random.Next(10000))
-        Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct")
-        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~9999)")
+        Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct passcode")
+        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "to continue! (4 digits: 0000~9999)")
         Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: Oh no! This only allows 12 tries!")
         Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
         Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8))
@@ -650,39 +650,46 @@ Module SunnysBigAdventure
                     If Input.Text <> "Input: " Then _
                         Input.Text = Input.Text.Substring(0, Input.Text.Length - 1)
                 Case ConsoleKey.Enter
-                    Dim inputNumber = Short.Parse(String.Concat(
+                    If Input.Text.Length = "Input: 9999".Length Then
+                        Dim inputNumber = Short.Parse(String.Concat(
                                     Input.Text.SkipWhile(Function(c) Not Char.IsDigit(c))))
-                    Dim t = Matches(inputNumber, Passcode)
-                    Dim p = NextPosition()
-                    If t.CorrectNumPos = 4 Then
-                        Barrier.Dispose()
-                        Input.Text = "Gate open!"
-                        Trigger.Dispose()
-                    ElseIf p.HasValue Then
-                        Input.Text = "Input: "
-                        Dim e As New TextEntity(WriteEntities, String.Concat(inputNumber,
-                            " ", New String("+"c, t.CorrectNumPos), New String("-"c, t.CorrectNum)), p)
+                        Dim t = Matches(inputNumber, Passcode)
+                        Dim p = NextPosition()
+                        If t.CorrectNumPos = 4 Then
+                            Input.Text = "Gate open!"
+                            Barrier.Dispose()
+                            Trigger.Dispose()
+                        ElseIf p.HasValue Then
+                            Input.Text = "Input: "
+                            Dim e As New TextEntity(WriteEntities, String.Concat(inputNumber,
+                                " ", New String("+"c, t.CorrectNumPos), New String("-"c, t.CorrectNum)), p)
+                        Else
+                            Input.Text = "Gate locked."
+                            ActiveEntity.Sprite = Sunny_Angry
+                            Trigger.Dispose()
+                        End If
                     Else
-                        Input.Text = "Gate locked."
-                        ActiveEntity.Sprite = Sunny_Angry
+                        Input.Text = "Input: "
                     End If
             End Select
             Return True
         End Function,
         Sub()
-            Instruction.Position = New Point(10, 0)
+            Instruction.Position = New Point(5, 0)
             Threading.Thread.Sleep(500)
-            Instruction2.Position = New Point(10, 1)
+            Instruction2.Position = New Point(5, 1)
             Threading.Thread.Sleep(500)
             Instruction3.Position = New Point(0, 2)
             Threading.Thread.Sleep(500)
             Input.Position = New Point(0, 3)
         End Sub)
-        Function Matches(guess As Short, actual As Short) As (CorrectNumPos As Integer, CorrectNum As Integer)
+        Public Shared Function Matches(guess As Short, actual As Short) As (CorrectNumPos As Integer, CorrectNum As Integer)
             Dim g = guess.ToString()
-            Dim a = actual.ToString()
+            Dim a = actual.ToString().PadLeft(4, "0"c)
             Dim correctNumPosCount = g.Zip(a, Function(gc, ac) gc = ac).Count(Function(b) b)
-            Dim correctNumCount = g.SelectMany(Function(gc) a, Function(gc, ac) gc = ac).Count(Function(b) b) - correctNumPosCount
+            Dim correctNumCount = g.GroupBy(Function(gc) gc).
+                                    Zip(a.GroupBy(Function(ac) ac), Function(gc, ac) ac.Count - gc.Count).
+                                    Count(Function(c) c > 0) - correctNumPosCount
             Return (correctNumPosCount, correctNumCount)
         End Function
         Protected NextPositionStore As New Point(12, 3)
@@ -861,6 +868,8 @@ Module SunnysBigAdventure
     Const WindowHeight = 10
     Public Event Tick()
     Sub Main()
+        WriteLine(Region3_CodeCrack.Matches(1234, 4567))
+        Return
         If LargestWindowWidth < 48 Or LargestWindowHeight < 10 Then
             WriteLine("ERROR: Please decrease font size")
             Return
