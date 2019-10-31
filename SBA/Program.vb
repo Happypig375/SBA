@@ -687,9 +687,17 @@ Module SunnysBigAdventure
             Dim g = guess.ToString()
             Dim a = actual.ToString().PadLeft(4, "0"c)
             Dim correctNumPosCount = g.Zip(a, Function(gc, ac) gc = ac).Count(Function(b) b)
-            Dim correctNumCount = g.GroupBy(Function(gc) gc).
-                                    Zip(a.GroupBy(Function(ac) ac), Function(gc, ac) ac.Count - gc.Count).
-                                    Count(Function(c) c > 0) - correctNumPosCount
+            Dim correctNumCount1 = g.GroupBy(Function(gc) gc)
+            Dim correctNumCount2 = correctNumCount1.OrderBy(Function(gc) gc.Key)
+            ' new[] { 3, 2, 1, 3, 4, 5, 4, 5, 3 }.GroupBy(gc => gc).OrderBy(gc => gc.Key).
+            ' GroupJoin(new[] { 4, 4, 4, 5, 5, 5 }, gc => gc.Key, ac => ac, (gc, ac) => (gc, ac)).
+            ' Select(t => "[" + string.Join(", ", t.gc) + "], " + "[" + string.Join(", ", t.ac) + "]")
+            Dim correctNumCount3 = correctNumCount2.
+                GroupJoin(a, Function(gc) gc.Key, Function(ac) ac, Function(gc, ac) ac.Count - gc.Count)
+            Dim correctNumCount4 = correctNumCount3.
+            Where(Function(difference) difference > 0)
+            Dim correctNumCount5 = correctNumCount4.Sum()
+            Dim correctNumCount = correctNumCount5 - correctNumPosCount
             Return (correctNumPosCount, correctNumCount)
         End Function
         Protected NextPositionStore As New Point(12, 3)
