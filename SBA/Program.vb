@@ -137,12 +137,24 @@ Module SunnysBigAdventure
             CursorPosition = position.GetValueOrDefault()
             ForegroundColor = sprite.Color
             Write(sprite.Display)
+            ResetColor()
         End If
     End Sub
     ReadOnly Random As New Random()
     <Runtime.CompilerServices.Extension>
     Function RandomItem(Of T)(list As ICollection(Of T)) As T
         Return list.ElementAt(Random.Next(list.Count))
+    End Function
+    Const FileName = "Region.txt"
+    Sub FileSet(region As Region)
+        IO.File.WriteAllText(FileName, region.GetType().FullName)
+    End Sub
+    Function FileGet() As Region
+        Try
+            Return CType(Type.GetType(IO.File.ReadAllText(FileName)).GetConstructor({}).Invoke({}), Region)
+        Catch
+            Return New Region1_Title()
+        End Try
     End Function
 #End Region
 #Region "Entity Classes"
@@ -268,6 +280,7 @@ Module SunnysBigAdventure
                                 Write(topLeft)
                                 SetCursorPosition(rect.Right, rect.Top)
                                 Write(topRight)
+                                ResetColor()
                             End Sub)
                     End Sub
                 Draw(bounds.OldValue, Empty, Empty, Empty, Empty, Empty, Empty)
@@ -520,7 +533,7 @@ Module SunnysBigAdventure
     Public ActiveEntity As PlayerEntity = Sunny
 #End Region
 #Region "Regions"
-    Dim _currentRegion As Region = New Region3_CodeCrack()
+    Dim _currentRegion As Region = FileGet()
     MustInherit Class Region
         Implements IDisposable
         Sub New(Optional bedrock As Boolean = True)
@@ -528,18 +541,21 @@ Module SunnysBigAdventure
                                        New Rectangle(0, WindowHeight - 2, WindowWidth, 1)), Nothing)
         End Sub
         ''' <returns>Whether region was changed.</returns>
-        Function Go(region As Func(Of Region)) As Boolean
-            If region IsNot Nothing Then
-                SetCurrentRegion = region
+        Public Function GoLeft() As Boolean
+            If Left IsNot Nothing Then
+                SetCurrentRegion = Left
                 Return True
             End If
             Return False
         End Function
-        Public Function GoLeft() As Boolean
-            Return Go(Left)
-        End Function
+        ''' <returns>Whether region was changed.</returns>
         Public Function GoRight() As Boolean
-            Return Go(Right)
+            If Right IsNot Nothing Then
+                SetCurrentRegion = Right
+                FileSet(CurrentRegion)
+                Return True
+            End If
+            Return False
         End Function
         Protected MustOverride ReadOnly Property Left As Func(Of Region)
         Protected MustOverride ReadOnly Property Right As Func(Of Region)
@@ -585,7 +601,7 @@ Module SunnysBigAdventure
         Inherits Region
         Protected Passcode As Byte = CByte(Random.Next(101))
         Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct")
-        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~9999)")
+        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~100)")
         Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: I must guess it...")
         Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
         Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8))
@@ -639,6 +655,7 @@ Module SunnysBigAdventure
         Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct passcode")
         Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "to continue! (4 digits: 0000~9999)")
         Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: Oh no! This only allows 12 tries!")
+        Protected ReadOnly Instruction4 As New TextEntity(WriteEntities, "+: Correct Number & Position, -: Correct Number")
         Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
         Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8))
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 6, 6, 3),
@@ -661,7 +678,7 @@ Module SunnysBigAdventure
                             Trigger.Dispose()
                         ElseIf p.HasValue Then
                             Input.Text = "Input: "
-                            Dim e As New TextEntity(WriteEntities, String.Concat(inputNumber,
+                            Dim e As New TextEntity(WriteEntities, String.Concat(inputNumber.ToString().PadLeft(4, "0"c),
                                 " ", New String("+"c, t.CorrectNumPos), New String("-"c, t.CorrectNum)), p)
                         Else
                             Input.Text = "Gate locked."
@@ -675,6 +692,7 @@ Module SunnysBigAdventure
             Return True
         End Function,
         Sub()
+            ActiveEntity.Sprite = Sunny_
             Instruction.Position = New Point(5, 0)
             Threading.Thread.Sleep(500)
             Instruction2.Position = New Point(5, 1)
@@ -682,30 +700,27 @@ Module SunnysBigAdventure
             Instruction3.Position = New Point(0, 2)
             Threading.Thread.Sleep(500)
             Input.Position = New Point(0, 3)
+            Threading.Thread.Sleep(500)
+            Instruction4.Position = New Point(0, 9)
         End Sub)
         Public Shared Function Matches(guess As Short, actual As Short) As (CorrectNumPos As Integer, CorrectNum As Integer)
-            Dim g = guess.ToString()
+            Dim g = guess.ToString().PadLeft(4, "0"c)
             Dim a = actual.ToString().PadLeft(4, "0"c)
             Dim correctNumPosCount = g.Zip(a, Function(gc, ac) gc = ac).Count(Function(b) b)
-            Dim correctNumCount1 = g.GroupBy(Function(gc) gc)
-            Dim correctNumCount2 = correctNumCount1.OrderBy(Function(gc) gc.Key)
-            ' new[] { 3, 2, 1, 3, 4, 5, 4, 5, 3 }.GroupBy(gc => gc).OrderBy(gc => gc.Key).
-            ' GroupJoin(new[] { 4, 4, 4, 5, 5, 5 }, gc => gc.Key, ac => ac, (gc, ac) => (gc, ac)).
-            ' Select(t => "[" + string.Join(", ", t.gc) + "], " + "[" + string.Join(", ", t.ac) + "]")
-            Dim correctNumCount3 = correctNumCount2.
-                GroupJoin(a, Function(gc) gc.Key, Function(ac) ac, Function(gc, ac) ac.Count - gc.Count)
-            Dim correctNumCount4 = correctNumCount3.
-            Where(Function(difference) difference > 0)
-            Dim correctNumCount5 = correctNumCount4.Sum()
-            Dim correctNumCount = correctNumCount5 - correctNumPosCount
+            Dim correctNumCount = g.
+                GroupBy(Function(gc) gc).
+                OrderBy(Function(gc) gc.Key).
+                GroupJoin(a, Function(gc) gc.Key, Function(ac) ac, Function(gc, ac) Math.Min(ac.Count, gc.Count)).
+                Sum() - correctNumPosCount
             Return (correctNumPosCount, correctNumCount)
         End Function
-        Protected NextPositionStore As New Point(12, 3)
+        Protected NextPositionStore As New Point(12, 2)
         Function NextPosition() As Point?
             Dim p As New Point(NextPositionStore.Left, NextPositionStore.Top + 1)
-            If p.Top = 7 Then If p.Left = 12 + 2 * 10 Then NextPosition = Nothing _
-                              Else NextPosition = New Point(p.Left + 10, 3) Else NextPosition = p
-            NextPositionStore = p
+            If p.Top = 7 Then _
+                If p.Left = 12 + 2 * 10 Then NextPosition = Nothing _
+                Else NextPosition = New Point(p.Left + 10, 3) Else NextPosition = p
+            If NextPosition.HasValue Then NextPositionStore = NextPosition.GetValueOrDefault()
         End Function
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region4_ConnectFour()
@@ -718,14 +733,16 @@ Module SunnysBigAdventure
             CPU
         End Enum
         Protected ReadOnly GameArea As New Rectangle(8, 1, 17, 8)
+        Protected ReadOnly Instructions As New TextEntity(WriteEntities, "Press 1~7 to add a piece. Connect 4 to win")
+        Protected ReadOnly Ruler As New TextEntity(WriteEntities, "11223344556677")
         Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("○"c))
         Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("●"c))
-        Protected ReadOnly Hi As New SpriteEntity(WriteEntities, New Sprite("5"c)) With {.Position = New Point(30, 5)}
         Protected ReadOnly GameField As New RectangleEntity(WriteEntities, GameArea)
         Protected WaitingForCPU As Boolean = False
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities,
             New Rectangle(GameArea.Left - 3, GameArea.Top - 1, GameArea.Width + 6, GameArea.Height + 1),
             Function(key)
+                ActiveEntity.Sprite = Sunny_
                 If Not WaitingForCPU Then
                     Select Case key
                         Case ConsoleKey.D1 To ConsoleKey.D7
@@ -734,29 +751,28 @@ Module SunnysBigAdventure
                                 Whites.Add(New Point(GameArea.Left + i * 2, GameArea.Top + 1), AddressOf OnCPUTick)
                                 WaitingForCPU = True
                             End If
-                        Case ConsoleKey.Enter
-                            Whites.Clear()
-                            Blacks.Clear()
                     End Select
                 End If
                 Return True
             End Function,
             Sub()
                 Instructions.Position = New Point(3, 0)
+                Ruler.Position = New Point(10, 9)
                 AddHandler Tick, AddressOf OnTick
             End Sub, Sub() RemoveHandler Tick, AddressOf OnTick)
-        Protected ReadOnly Instructions As New TextEntity(WriteEntities, "Press 1~7 to add a piece. Connect 4 to win")
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region3_CodeCrack()
-        Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
+        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region5_Win()
         Protected Sub OnTick()
             Select Case WhoWin(Nothing)
                 Case Player.Player
                     Instructions.Text = "You win!"
                     Instructions.Position = New Point(13, 0)
+                    ActiveEntity.Position = New Point(GameArea.Right + 4, GameArea.Bottom - 3)
                     Trigger.Dispose()
                 Case Player.CPU
                     Instructions.Text = "CPU wins!"
                     Instructions.Position = New Point(13, 0)
+                    ActiveEntity.Sprite = Sunny_Angry
                     Trigger.Dispose()
             End Select
         End Sub
@@ -862,7 +878,7 @@ Module SunnysBigAdventure
             ' 3. Avoid white win
             For Each x In choices
                 For Each x2 In choices
-                    If WhoWin((x, x2)) = Player.Player Then avoidChoices.Add(x) : Debug.WriteLine("Removed x={0} x2={1}", x, x2)
+                    If WhoWin((x, x2)) = Player.Player Then avoidChoices.Add(x)
                 Next
             Next
             ' 4. Random placement
@@ -871,13 +887,25 @@ Module SunnysBigAdventure
                    If(avoidChoices.Count > 0, avoidChoices.RandomItem(), New Integer?()))
         End Function
     End Class
+    Class Region5_Win
+        Inherits Region
+        Protected ReadOnly Win As New TextEntity(WriteEntities, "You win!! Press Enter to start again.", New Point(0, 0))
+        Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(0, 0, WindowWidth, WindowHeight),
+            Function(key)
+                If key = ConsoleKey.Enter Then
+                    SetCurrentRegion = Function() New Region1_Title()
+                    FileSet(CurrentRegion)
+                End If
+                Return False
+            End Function)
+        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region4_ConnectFour()
+        Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
+    End Class
 #End Region
     Const WindowWidth = 48
     Const WindowHeight = 10
     Public Event Tick()
     Sub Main()
-        WriteLine(Region3_CodeCrack.Matches(1234, 4567))
-        Return
         If LargestWindowWidth < 48 Or LargestWindowHeight < 10 Then
             WriteLine("ERROR: Please decrease font size")
             Return
