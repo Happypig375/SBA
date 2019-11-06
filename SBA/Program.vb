@@ -226,8 +226,9 @@ Module SunnysBigAdventure
     End Class
     Class RectangleEntity
         Inherits Entity
-        Public Sub New(entities As ICollection(Of Entity), rect As Rectangle?)
+        Public Sub New(entities As ICollection(Of Entity), rect As Rectangle?, Optional color As ConsoleColor = ConsoleColor.White)
             MyBase.New(entities)
+            Me.Color = color
             Rectangle = rect
         End Sub
         Protected Overrides Function ForbidEntry(other As Entity, otherBounds As Rectangle) As Boolean
@@ -241,6 +242,7 @@ Module SunnysBigAdventure
         Protected Overrides Function BoundsForNewPoint(point As Point) As Rectangle?
             Return IfHasValue(Bounds, Function(rect) New Rectangle(point, rect.Width, rect.Height))
         End Function
+        Public Property Color As ConsoleColor
         Public Property Rectangle As Rectangle?
             Get
                 Return Bounds
@@ -263,7 +265,7 @@ Module SunnysBigAdventure
                                             Write(horizontal)
                                         Next
                                     End Sub
-                                ResetColor()
+                                ForegroundColor = Color
                                 DrawHorizontal(rect.Bottom)
                                 SetCursorPosition(rect.Left, rect.Bottom)
                                 Write(bottomLeft)
@@ -337,8 +339,10 @@ Module SunnysBigAdventure
     End Class
     Class TextEntity
         Inherits Entity
-        Public Sub New(entities As ICollection(Of Entity), text As String, Optional position As Point? = Nothing)
+        Public Sub New(entities As ICollection(Of Entity), text As String,
+                       Optional position As Point? = Nothing, Optional color As ConsoleColor = ConsoleColor.White)
             MyBase.New(entities)
+            Me.Color = color
             Me.Text = text
             Me.Position = position
         End Sub
@@ -355,19 +359,20 @@ Module SunnysBigAdventure
                 _text = value
             End Set
         End Property
+        Public Property Color As ConsoleColor
         Protected Overrides Sub RedrawAt(bounds As Delta(Of Rectangle?))
             RedrawAt(bounds, New Delta(Of String)(_text))
         End Sub
         Protected Overloads Sub RedrawAt(bounds As Delta(Of Rectangle?), text As Delta(Of String))
             IfHasValue(bounds.OldValue, Sub(point)
-                                            ResetColor()
+                                            ForegroundColor = Color
                                             CursorPosition = point.TopLeft
                                             For i = 1 To text.OldValue.Length
                                                 Write(Empty)
                                             Next
                                         End Sub)
             IfHasValue(bounds.NewValue, Sub(point)
-                                            ResetColor()
+                                            ForegroundColor = Color
                                             CursorPosition = point.TopLeft
                                             Write(text.NewValue)
                                         End Sub)
@@ -485,7 +490,7 @@ Module SunnysBigAdventure
         ReadOnly Entities As ICollection(Of Entity)
         Public Property Template As Sprite
         Public Sub Add(position As Point?, Optional onHitGround As GravityEntity.GroundHitEventHandler = Nothing)
-            Entities.Add(New GravityEntityFactoryEntity(Entities, Sprite, Me, position, onHitGround))
+            Entities.Add(New GravityEntityFactoryEntity(Entities, Sprite, Me, position, onHitGround) With {.VerticalVelocity = 1})
         End Sub
         Public Sub Clear()
             For Each item In Entities.OfType(Of GravityEntityFactoryEntity).Where(Function(e) e.Owner Is Me)
@@ -519,7 +524,7 @@ Module SunnysBigAdventure
     ReadOnly Empty_ As New Sprite(Empty)
     ReadOnly GlobalEntities As New HashSet(Of Entity)
 
-    Public ReadOnly Sunny_ As New Sprite("☺"c)
+    Public ReadOnly Sunny_ As New Sprite("☺"c, ConsoleColor.Green)
     Public ReadOnly Sunny_Angry As New Sprite("☹"c, ConsoleColor.Red)
     Public ReadOnly Sunny As New PlayerEntity(GlobalEntities, Sunny_)
 
@@ -581,8 +586,14 @@ Module SunnysBigAdventure
     End Property
     Class Region1_Title
         Inherits Region
-        Protected ReadOnly SBA As New TextEntity(WriteEntities, "SBA: Sunny's Big Adventure", New Point(10, 0))
-        Protected ReadOnly Arrows As New TextEntity(WriteEntities, "▶▶▶▶▶▶▶▶", New Point(20, 1))
+        Protected ReadOnly SBA As New TextEntity(WriteEntities, "SBA: Sunny's Big Adventure", New Point(10, 0), ConsoleColor.Yellow)
+        Protected ReadOnly Arrow1 As New TextEntity(WriteEntities, "▶", New Point(17, 1), color:=ConsoleColor.DarkRed)
+        Protected ReadOnly Arrow2 As New TextEntity(WriteEntities, "▶", New Point(18, 1), color:=ConsoleColor.Red)
+        Protected ReadOnly Arrow3 As New TextEntity(WriteEntities, "▶", New Point(19, 1), color:=ConsoleColor.Yellow)
+        Protected ReadOnly Arrow4 As New TextEntity(WriteEntities, "▶", New Point(20, 1), color:=ConsoleColor.Green)
+        Protected ReadOnly Arrow5 As New TextEntity(WriteEntities, "▶", New Point(21, 1), color:=ConsoleColor.Cyan)
+        Protected ReadOnly Arrow6 As New TextEntity(WriteEntities, "▶", New Point(22, 1), color:=ConsoleColor.Blue)
+        Protected ReadOnly Arrow7 As New TextEntity(WriteEntities, "▶", New Point(23, 1), color:=ConsoleColor.Magenta)
         Protected ReadOnly Keybinds As New TextEntity(WriteEntities, "Arrow keys: Move", New Point(10, 9))
         'Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(0, 1, WindowWidth, 8),
         '    Nothing, Sub() Sunny.Sprite = Sunny_, Function(key)
@@ -604,9 +615,10 @@ Module SunnysBigAdventure
         Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~100)")
         Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: I must guess it...")
         Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
-        Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8))
+        Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8), ConsoleColor.Cyan)
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 6, 6, 3),
                                                       Function(key)
+                                                          ActiveEntity.Sprite = Sunny_
                                                           Select Case key
                                                               Case ConsoleKey.D0 To ConsoleKey.D9
                                                                   Input.Text &= key.ToString()(1)
@@ -620,9 +632,12 @@ Module SunnysBigAdventure
                                                                       Select Case inputNumber
                                                                           Case Is < Passcode
                                                                               Instruction3.Text = "Sunny: The input is too small..."
+                                                                              ActiveEntity.Sprite = Sunny_Angry
                                                                           Case Is > Passcode
                                                                               Instruction3.Text = "Sunny: The input is too large..."
+                                                                              ActiveEntity.Sprite = Sunny_Angry
                                                                           Case Else
+                                                                              Instruction3.Color = ConsoleColor.Green
                                                                               Instruction3.Text = "Sunny: Yes! The passcode is correct!"
                                                                               Instruction.Dispose()
                                                                               Instruction2.Dispose()
@@ -657,9 +672,10 @@ Module SunnysBigAdventure
         Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: Oh no! This only allows 12 tries!")
         Protected ReadOnly Instruction4 As New TextEntity(WriteEntities, "+: Correct Number & Position, -: Correct Number")
         Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
-        Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8))
+        Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8), ConsoleColor.Cyan)
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 6, 6, 3),
         Function(key)
+            ActiveEntity.Sprite = Sunny_
             Select Case key
                 Case ConsoleKey.D0 To ConsoleKey.D9
                     If Input.Text.Length < "Input: 9999".Length Then Input.Text &= key.ToString()(1)
@@ -673,6 +689,7 @@ Module SunnysBigAdventure
                         Dim t = Matches(inputNumber, Passcode)
                         Dim p = NextPosition()
                         If t.CorrectNumPos = 4 Then
+                            Input.Color = ConsoleColor.Green
                             Input.Text = "Gate open!"
                             Barrier.Dispose()
                             Trigger.Dispose()
@@ -680,7 +697,9 @@ Module SunnysBigAdventure
                             Input.Text = "Input: "
                             Dim e As New TextEntity(WriteEntities, String.Concat(inputNumber.ToString().PadLeft(4, "0"c),
                                 " ", New String("+"c, t.CorrectNumPos), New String("-"c, t.CorrectNum)), p)
+                            ActiveEntity.Sprite = Sunny_Angry
                         Else
+                            Input.Color = ConsoleColor.Red
                             Input.Text = "Gate locked."
                             ActiveEntity.Sprite = Sunny_Angry
                             Trigger.Dispose()
@@ -735,9 +754,9 @@ Module SunnysBigAdventure
         Protected ReadOnly GameArea As New Rectangle(8, 1, 17, 8)
         Protected ReadOnly Instructions As New TextEntity(WriteEntities, "Press 1~7 to add a piece. Connect 4 to win")
         Protected ReadOnly Ruler As New TextEntity(WriteEntities, "11223344556677")
-        Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("○"c))
-        Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("●"c))
-        Protected ReadOnly GameField As New RectangleEntity(WriteEntities, GameArea)
+        Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("○"c, ConsoleColor.Green))
+        Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("●"c, ConsoleColor.Red))
+        Protected ReadOnly GameField As New RectangleEntity(WriteEntities, GameArea, ConsoleColor.Blue)
         Protected WaitingForCPU As Boolean = False
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities,
             New Rectangle(GameArea.Left - 3, GameArea.Top - 1, GameArea.Width + 6, GameArea.Height + 1),
@@ -765,11 +784,13 @@ Module SunnysBigAdventure
         Protected Sub OnTick()
             Select Case WhoWin(Nothing)
                 Case Player.Player
+                    Instructions.Color = ConsoleColor.Green
                     Instructions.Text = "You win!"
                     Instructions.Position = New Point(13, 0)
                     ActiveEntity.Position = New Point(GameArea.Right + 4, GameArea.Bottom - 3)
                     Trigger.Dispose()
                 Case Player.CPU
+                    Instructions.Color = ConsoleColor.Red
                     Instructions.Text = "CPU wins!"
                     Instructions.Position = New Point(13, 0)
                     ActiveEntity.Sprite = Sunny_Angry
