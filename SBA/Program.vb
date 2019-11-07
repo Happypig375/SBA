@@ -294,13 +294,13 @@ Module SunnysBigAdventure
         Inherits RectangleEntity
         Public Sub New(entities As ICollection(Of Entity), rect As Rectangle?,
                        Optional keyPress As Func(Of ConsoleKey, Boolean) = Nothing,
-                       Optional enter As Action = Nothing, Optional leave As Action = Nothing)
+                       Optional entityMove As Action = Nothing, Optional leave As Action = Nothing)
             MyBase.New(entities, rect)
-            Me.Enter = enter
+            Me.EntityMove = entityMove
             Me.Leave = leave
             Me.KeyPress = keyPress
         End Sub
-        Public Property Enter As Action
+        Public Property EntityMove As Action
         Dim EnterLock As Boolean
         Public Property Leave As Action
         Dim LeaveLock As Boolean
@@ -313,7 +313,7 @@ Module SunnysBigAdventure
                     player.Trigger = Me
                     If Not EnterLock Then
                         EnterLock = True
-                        Enter?.Invoke()
+                        EntityMove?.Invoke()
                         EnterLock = False
                     End If
                 ElseIf player.Trigger Is Me Then
@@ -852,7 +852,7 @@ Module SunnysBigAdventure
                             Next
                             Return New Point(whiteX, 7)
                         End Function)
-            Dim Connected = Function(p1 As Point, p2 As Point, p3 As Point, p4 As Point)
+            Dim connected = Function(p1 As Point, p2 As Point, p3 As Point, p4 As Point)
                                 If Matches(Whites, p1, white) AndAlso
                                    Matches(Whites, p2, white) AndAlso
                                    Matches(Whites, p3, white) AndAlso
@@ -866,28 +866,28 @@ Module SunnysBigAdventure
             ' -
             For y = 1 To 7
                 For x = 1 To 4
-                    WhoWin = Connected(New Point(x, y), New Point(x + 1, y), New Point(x + 2, y), New Point(x + 3, y))
+                    WhoWin = connected(New Point(x, y), New Point(x + 1, y), New Point(x + 2, y), New Point(x + 3, y))
                     If WhoWin <> Player.None Then Return WhoWin
                 Next
             Next
             ' |
             For y = 1 To 4
                 For x = 1 To 7
-                    WhoWin = Connected(New Point(x, y), New Point(x, y + 1), New Point(x, y + 2), New Point(x, y + 3))
+                    WhoWin = connected(New Point(x, y), New Point(x, y + 1), New Point(x, y + 2), New Point(x, y + 3))
                     If WhoWin <> Player.None Then Return WhoWin
                 Next
             Next
             ' \
             For x = 1 To 4
                 For y = 1 To 4
-                    WhoWin = Connected(New Point(x, y), New Point(x + 1, y + 1), New Point(x + 2, y + 2), New Point(x + 3, y + 3))
+                    WhoWin = connected(New Point(x, y), New Point(x + 1, y + 1), New Point(x + 2, y + 2), New Point(x + 3, y + 3))
                     If WhoWin <> Player.None Then Return WhoWin
                 Next
             Next
             ' /
             For x = 1 To 4
                 For y = 4 To 7
-                    WhoWin = Connected(New Point(x, y), New Point(x + 1, y - 1), New Point(x + 2, y - 2), New Point(x + 3, y - 3))
+                    WhoWin = connected(New Point(x, y), New Point(x + 1, y - 1), New Point(x + 2, y - 2), New Point(x + 3, y - 3))
                     If WhoWin <> Player.None Then Return WhoWin
                 Next
             Next
@@ -941,10 +941,10 @@ Module SunnysBigAdventure
                 End If
                 Return False
             End Function,
-            Sub() AddHandler Tick, AddressOf OnTick,
+            Sub() If Not TickEvent.GetInvocationList().Where(Function(x) x.Target Is Me).Any() Then AddHandler Tick, AddressOf OnTick,
             Sub() RemoveHandler Tick, AddressOf OnTick)
         Protected Sub OnTick()
-            Dim _entity As New IteratingSpriteEntity(WriteEntities, Fireworks, New Point(Random.Next(WindowWidth), 1))
+            WriteEntities.Add(New IteratingSpriteEntity(WriteEntities, Fireworks, New Point(Random.Next(WindowWidth), 1)))
         End Sub
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region4_ConnectFour()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
