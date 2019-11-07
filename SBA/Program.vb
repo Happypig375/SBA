@@ -405,15 +405,40 @@ Module SunnysBigAdventure
             WriteAt(bounds.NewValue?.TopLeft, sprite.NewValue)
         End Sub
     End Class
-    Class GravityEntity
+    MustInherit Class TickEntity
         Inherits SpriteEntity
+        Protected MustOverride Sub OnTick()
         Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
             MyBase.New(entities, sprite)
-            AddHandler Tick, AddressOf WhenTick
+            AddHandler Tick, AddressOf OnTick
         End Sub
-        Public Property VerticalVelocity As Integer
-        Public Event GroundHit()
-        Sub WhenTick()
+        Public Overrides Sub Dispose()
+            RemoveHandler Tick, AddressOf OnTick
+            MyBase.Dispose()
+        End Sub
+    End Class
+    Class IteratingSpriteEntity
+        Inherits TickEntity
+        ReadOnly sprites As IEnumerator(Of Sprite)
+        Public Sub New(entities As ICollection(Of Entity), sprites As IEnumerable(Of Sprite), position As Point)
+            MyBase.New(entities, sprites.First())
+            Me.Position = position
+            Me.sprites = sprites.Skip(1).GetEnumerator()
+        End Sub
+        Protected Overrides Sub OnTick()
+            If sprites.MoveNext() Then Sprite = sprites.Current Else Dispose()
+        End Sub
+        Public Overrides Sub Dispose()
+            sprites.Dispose()
+            MyBase.Dispose()
+        End Sub
+    End Class
+    Class GravityEntity
+        Inherits TickEntity
+        Public Sub New(entities As ICollection(Of Entity), sprite As Sprite)
+            MyBase.New(entities, sprite)
+        End Sub
+        Protected Overrides Sub OnTick()
             If VerticalVelocity > 0 Then
                 MyBase.GoUp()
                 VerticalVelocity -= 1
@@ -425,6 +450,8 @@ Module SunnysBigAdventure
                 GroundHitEvent = Nothing
             End If
         End Sub
+        Public Property VerticalVelocity As Integer
+        Public Event GroundHit()
         Public Overrides Function GoUp() As Boolean
             If MyBase.GoDown() Then
                 Return False ' Can't jump while falling
@@ -434,10 +461,6 @@ Module SunnysBigAdventure
                 Return True
             End If
         End Function
-        Public Overrides Sub Dispose()
-            RemoveHandler Tick, AddressOf WhenTick
-            MyBase.Dispose()
-        End Sub
     End Class
     Class PlayerEntity
         Inherits GravityEntity
@@ -535,6 +558,10 @@ Module SunnysBigAdventure
     Public ReadOnly Horsey_Dead As New Sprite("♞"c, ConsoleColor.DarkMagenta)
     Public ReadOnly Horsey As New SpriteEntity(GlobalEntities, Horsey_)
 
+    Public ReadOnly Firework_1 As New Sprite("✳"c, ConsoleColor.Yellow)
+    Public ReadOnly Firework_2 As New Sprite("✴"c, ConsoleColor.Red)
+    Public ReadOnly Firework_3 As New Sprite("❇"c, ConsoleColor.DarkRed)
+
     Public ActiveEntity As PlayerEntity = Sunny
 #End Region
 #Region "Regions"
@@ -587,24 +614,15 @@ Module SunnysBigAdventure
     Class Region1_Title
         Inherits Region
         Protected ReadOnly SBA As New TextEntity(WriteEntities, "SBA: Sunny's Big Adventure", New Point(10, 0), ConsoleColor.Yellow)
-        Protected ReadOnly Arrow1 As New TextEntity(WriteEntities, "▶", New Point(17, 1), color:=ConsoleColor.DarkRed)
-        Protected ReadOnly Arrow2 As New TextEntity(WriteEntities, "▶", New Point(18, 1), color:=ConsoleColor.Red)
-        Protected ReadOnly Arrow3 As New TextEntity(WriteEntities, "▶", New Point(19, 1), color:=ConsoleColor.Yellow)
-        Protected ReadOnly Arrow4 As New TextEntity(WriteEntities, "▶", New Point(20, 1), color:=ConsoleColor.Green)
-        Protected ReadOnly Arrow5 As New TextEntity(WriteEntities, "▶", New Point(21, 1), color:=ConsoleColor.Cyan)
-        Protected ReadOnly Arrow6 As New TextEntity(WriteEntities, "▶", New Point(22, 1), color:=ConsoleColor.Blue)
-        Protected ReadOnly Arrow7 As New TextEntity(WriteEntities, "▶", New Point(23, 1), color:=ConsoleColor.Magenta)
+        Protected ReadOnly Arrow1 As New TextEntity(WriteEntities, "▶", New Point(17, 1), ConsoleColor.DarkRed)
+        Protected ReadOnly Arrow2 As New TextEntity(WriteEntities, "▶", New Point(18, 1), ConsoleColor.Red)
+        Protected ReadOnly Arrow3 As New TextEntity(WriteEntities, "▶", New Point(19, 1), ConsoleColor.Yellow)
+        Protected ReadOnly Arrow4 As New TextEntity(WriteEntities, "▶", New Point(20, 1), ConsoleColor.Green)
+        Protected ReadOnly Arrow5 As New TextEntity(WriteEntities, "▶", New Point(21, 1), ConsoleColor.Cyan)
+        Protected ReadOnly Arrow6 As New TextEntity(WriteEntities, "▶", New Point(22, 1), ConsoleColor.Blue)
+        Protected ReadOnly Arrow7 As New TextEntity(WriteEntities, "▶", New Point(23, 1), ConsoleColor.Magenta)
         Protected ReadOnly Keybinds As New TextEntity(WriteEntities, "Arrow keys: Move", New Point(10, 9))
-        'Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(0, 1, WindowWidth, 8),
-        '    Nothing, Sub() Sunny.Sprite = Sunny_, Function(key)
-        '                                              Select Case key
-        '                                                  Case ConsoleKey.Q
-        '                                                      Sunny.Sprite = If(Sunny.Sprite.Equals(Sunny_), Sunny_Angry, Sunny_)
-        '                                                      Return True
-        '                                                  Case Else
-        '                                                      Return False
-        '                                              End Select
-        '                                          End Function)
+        Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 1, WindowWidth - 30, 8))
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Nothing
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region2_NumberGuess()
     End Class
@@ -614,6 +632,7 @@ Module SunnysBigAdventure
         Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct")
         Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~100)")
         Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: I must guess it...")
+        Protected ReadOnly Instruction4 As New TextEntity(WriteEntities, "0 to 9: Input passcode")
         Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
         Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8), ConsoleColor.Cyan)
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 6, 6, 3),
@@ -660,6 +679,8 @@ Module SunnysBigAdventure
                                                           Instruction3.Position = New Point(0, 2)
                                                           Threading.Thread.Sleep(500)
                                                           Input.Position = New Point(0, 3)
+                                                          Threading.Thread.Sleep(500)
+                                                          Instruction4.Position = New Point(10, 9)
                                                       End Sub)
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region1_Title()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region3_CodeCrack()
@@ -911,6 +932,7 @@ Module SunnysBigAdventure
     Class Region5_Win
         Inherits Region
         Protected ReadOnly Win As New TextEntity(WriteEntities, "You win!! Press Enter to start again.", New Point(0, 0))
+        Protected ReadOnly Fireworks As Sprite() = {Firework_1, Firework_2, Firework_3}
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(0, 0, WindowWidth, WindowHeight),
             Function(key)
                 If key = ConsoleKey.Enter Then
@@ -918,7 +940,12 @@ Module SunnysBigAdventure
                     FileSet(CurrentRegion)
                 End If
                 Return False
-            End Function)
+            End Function,
+            Sub() AddHandler Tick, AddressOf OnTick,
+            Sub() RemoveHandler Tick, AddressOf OnTick)
+        Protected Sub OnTick()
+            Dim _entity As New IteratingSpriteEntity(WriteEntities, Fireworks, New Point(Random.Next(WindowWidth), 1))
+        End Sub
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region4_ConnectFour()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
     End Class
