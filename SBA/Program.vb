@@ -962,6 +962,12 @@ Module SunnysBigAdventure
         Title = "SBA: Sunny's Big Adventure"
         Console.WindowWidth = WindowWidth
         Console.WindowHeight = WindowHeight
+
+        WriteLine("Login")
+        WriteLine("-----")
+        WriteLine("User name: ")
+        Dim userName = ReadLine()
+
         CursorVisible = False
         Sunny.Position = New Point(2, 5)
         While True
