@@ -146,7 +146,9 @@ Module SunnysBigAdventure
         Return list.ElementAt(Random.Next(list.Count))
     End Function
     Const FileName = "Region.txt"
-    Sub FileSet(region As Region)
+    Const FieldSeparator = ChrW(&H1F) ' U+001F Unit Separator
+    Dim UserName As String
+    Sub SaveRegion(region As Region)
         IO.File.WriteAllText(FileName, region.GetType().FullName)
     End Sub
     Function FileGet() As Region
@@ -584,7 +586,7 @@ Module SunnysBigAdventure
         Public Function GoRight() As Boolean
             If Right IsNot Nothing Then
                 SetCurrentRegion = Right
-                FileSet(CurrentRegion)
+                SaveRegion(CurrentRegion)
                 Return True
             End If
             Return False
@@ -937,7 +939,7 @@ Module SunnysBigAdventure
             Function(key)
                 If key = ConsoleKey.Enter Then
                     SetCurrentRegion = Function() New Region1_Title()
-                    FileSet(CurrentRegion)
+                    SaveRegion(CurrentRegion)
                 End If
                 Return False
             End Function,
@@ -953,6 +955,7 @@ Module SunnysBigAdventure
     Const WindowWidth = 48
     Const WindowHeight = 10
     Public Event Tick()
+
     Sub Main()
         If LargestWindowWidth < 48 Or LargestWindowHeight < 10 Then
             WriteLine("ERROR: Please decrease font size")
@@ -965,9 +968,41 @@ Module SunnysBigAdventure
 
         WriteLine("Login")
         WriteLine("-----")
-        WriteLine("User name: ")
-        Dim userName = ReadLine()
+        While _currentRegion Is Nothing
+            Write("User name (Empty to register): ")
+            UserName = ReadLine()
+            If UserName = "" Then
+                Clear()
+                WriteLine("Register")
+                WriteLine("--------")
+                While UserName = ""
+                    Write("User name: ")
+                    UserName = ReadLine()
+                    If UserName = "" Then WriteLine("User name cannot be empty.")
+                End While
+                Write("Password: ")
+                IO.File.AppendAllLines(FileName, {String.Join(FieldSeparator, UserName, ReadLine(), GetType(Region1_Title).FullName)})
+                _currentRegion = New Region1_Title
+            Else
+                Using userFile As New IO.StreamReader(IO.File.Open(FileName, IO.FileMode.OpenOrCreate))
+                    While Not userFile.EndOfStream
+                        Dim line = userFile.ReadLine().Split(FieldSeparator)
+                        If UserName = line(0) Then
+                            Write("Password: ")
+                            If ReadLine() = line(1) Then
+                                _currentRegion = CType(Type.GetType(line(2)).GetConstructor({}).Invoke({}), Region)
+                            Else
+                                WriteLine("Incorrect password.")
+                            End If
+                            Exit While
+                        End If
+                    End While
+                    If userFile.EndOfStream AndAlso _currentRegion Is Nothing Then WriteLine("User not found.")
+                End Using
+            End If
+        End While
 
+        Clear()
         CursorVisible = False
         Sunny.Position = New Point(2, 5)
         While True
