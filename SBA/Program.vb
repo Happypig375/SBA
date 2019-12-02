@@ -145,19 +145,18 @@ Module SunnysBigAdventure
     Function RandomItem(Of T)(list As ICollection(Of T)) As T
         Return list.ElementAt(Random.Next(list.Count))
     End Function
-    Const FileName = "Region.txt"
+    Const FileName = "SBA.config"
     Const FieldSeparator = ChrW(&H1F) ' U+001F Unit Separator
     Dim UserName As String
     Sub SaveRegion(region As Region)
-        IO.File.WriteAllText(FileName, region.GetType().FullName)
+        Dim config = IO.File.ReadAllLines(FileName)
+        For i = 0 To config.Length - 1
+            Dim parts = config(i).Split(FieldSeparator)
+            If parts(0) = UserName Then _
+                config(i) = String.Join(FieldSeparator, parts(0), parts(1), region.GetType().FullName)
+        Next
+        IO.File.WriteAllLines(FileName, config)
     End Sub
-    Function FileGet() As Region
-        Try
-            Return CType(Type.GetType(IO.File.ReadAllText(FileName)).GetConstructor({}).Invoke({}), Region)
-        Catch
-            Return New Region1_Title()
-        End Try
-    End Function
 #End Region
 #Region "Entity Classes"
     MustInherit Class Entity
@@ -567,7 +566,7 @@ Module SunnysBigAdventure
     Public ActiveEntity As PlayerEntity = Sunny
 #End Region
 #Region "Regions"
-    Dim _currentRegion As Region = FileGet()
+    Dim _currentRegion As Region
     MustInherit Class Region
         Implements IDisposable
         Sub New(Optional bedrock As Boolean = True)
@@ -933,7 +932,7 @@ Module SunnysBigAdventure
     End Class
     Class Region5_Win
         Inherits Region
-        Protected ReadOnly Win As New TextEntity(WriteEntities, "You win!! Press Enter to start again.", New Point(0, 0))
+        Protected ReadOnly Win As New TextEntity(WriteEntities, "You win!! Press Enter to start again.", New Point(6, 0))
         Protected ReadOnly Fireworks As Sprite() = {Firework_1, Firework_2, Firework_3}
         Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(0, 0, WindowWidth, WindowHeight),
             Function(key)
@@ -946,7 +945,7 @@ Module SunnysBigAdventure
             Sub() If Not TickEvent.GetInvocationList().Where(Function(x) x.Target Is Me).Any() Then AddHandler Tick, AddressOf OnTick,
             Sub() RemoveHandler Tick, AddressOf OnTick)
         Protected Sub OnTick()
-            WriteEntities.Add(New IteratingSpriteEntity(WriteEntities, Fireworks, New Point(Random.Next(WindowWidth), 1)))
+            WriteEntities.Add(New IteratingSpriteEntity(WriteEntities, Fireworks, New Point(Random.Next(WindowWidth), Random.Next(1, 7))))
         End Sub
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region4_ConnectFour()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
@@ -966,7 +965,8 @@ Module SunnysBigAdventure
         Console.WindowWidth = WindowWidth
         Console.WindowHeight = WindowHeight
 
-        WriteLine("Login")
+        If Not IO.File.Exists(FileName) Then IO.File.Create(FileName).Dispose()
+Login:  WriteLine("Login")
         WriteLine("-----")
         While _currentRegion Is Nothing
             Write("User name (Empty to register): ")
@@ -976,33 +976,41 @@ Module SunnysBigAdventure
                 WriteLine("Register")
                 WriteLine("--------")
                 While UserName = ""
-                    Write("User name: ")
+                    Write("User name (Empty to login): ")
                     UserName = ReadLine()
-                    If UserName = "" Then WriteLine("User name cannot be empty.")
+                    If UserName = "" Then
+                        Clear()
+                        GoTo Login
+                    Else
+                        If IO.File.ReadLines(FileName).Any(Function(line) line.Split(FieldSeparator)(0) = UserName) Then
+                            WriteLine("User already exists.")
+                            UserName = ""
+                        End If
+                    End If
                 End While
                 Write("Password: ")
                 IO.File.AppendAllLines(FileName, {String.Join(FieldSeparator, UserName, ReadLine(), GetType(Region1_Title).FullName)})
+                WriteLine("Registration successful. Press Enter to start!")
+                ReadLine()
+                Clear()
                 _currentRegion = New Region1_Title
             Else
-                Using userFile As New IO.StreamReader(IO.File.Open(FileName, IO.FileMode.OpenOrCreate))
-                    While Not userFile.EndOfStream
-                        Dim line = userFile.ReadLine().Split(FieldSeparator)
-                        If UserName = line(0) Then
-                            Write("Password: ")
-                            If ReadLine() = line(1) Then
-                                _currentRegion = CType(Type.GetType(line(2)).GetConstructor({}).Invoke({}), Region)
-                            Else
-                                WriteLine("Incorrect password.")
-                            End If
-                            Exit While
-                        End If
-                    End While
-                    If userFile.EndOfStream AndAlso _currentRegion Is Nothing Then WriteLine("User not found.")
-                End Using
+                Dim config = IO.File.ReadAllLines(FileName)
+                Dim line = config.Select(Function(l) l.Split(FieldSeparator)).FirstOrDefault(Function(l) l(0) = UserName)
+                If line Is Nothing Then
+                    WriteLine("User not found.")
+                Else
+                    Write("Password: ")
+                    If ReadLine() = line(1) Then
+                        Clear()
+                        _currentRegion = CType(Type.GetType(line(2)).GetConstructor({}).Invoke({}), Region)
+                    Else
+                        WriteLine("Incorrect password.")
+                    End If
+                End If
             End If
         End While
 
-        Clear()
         CursorVisible = False
         Sunny.Position = New Point(2, 5)
         While True
