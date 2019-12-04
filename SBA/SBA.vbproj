@@ -1,8 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <PublishTrimmed>True</PublishTrimmed>
+    <PublishSingleFile>True</PublishSingleFile>
     <RootNamespace>SBA</RootNamespace>
-    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <TargetFramework>netcoreapp3.0</TargetFramework>
     <LangVersion>16</LangVersion>
     <OptionStrict>On</OptionStrict>
     <NoWarn />

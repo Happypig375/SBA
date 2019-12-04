@@ -684,9 +684,9 @@ Module SunnysBigAdventure
                                                           Instruction4.Position = New Point(10, 9)
                                                       End Sub)
         Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region1_Title()
-        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region3_CodeCrack()
+        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region3_BullsAndCows()
     End Class
-    Class Region3_CodeCrack
+    Class Region3_BullsAndCows
         Inherits Region
         Protected Passcode As Short = CShort(Random.Next(10000))
         Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct passcode")
@@ -801,7 +801,7 @@ Module SunnysBigAdventure
                 Ruler.Position = New Point(10, 9)
                 AddHandler Tick, AddressOf OnTick
             End Sub, Sub() RemoveHandler Tick, AddressOf OnTick)
-        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region3_CodeCrack()
+        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region3_BullsAndCows()
         Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region5_Win()
         Protected Sub OnTick()
             Select Case WhoWin(Nothing)
