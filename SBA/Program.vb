@@ -565,390 +565,390 @@ End Class
     Public ActiveEntity As PlayerEntity = Sunny
 #End Region
 #Region "Regions"
-    Dim _currentRegion As Region
-    MustInherit Class Region
-        Implements IDisposable
-        Sub New(Optional bedrock As Boolean = True)
-            If bedrock Then Equals(New RectangleEntity(WriteEntities,
-                                       New Rectangle(0, WindowHeight - 2, WindowWidth, 1)), Nothing)
-        End Sub
-        ''' <returns>Whether region was changed.</returns>
-        Public Function GoLeft() As Boolean
-            If Left IsNot Nothing Then
-                SetCurrentRegion = Left
-                Return True
-            End If
-            Return False
-        End Function
-        ''' <returns>Whether region was changed.</returns>
-        Public Function GoRight() As Boolean
-            If Right IsNot Nothing Then
-                SetCurrentRegion = Right
-                SaveRegion(CurrentRegion)
-                Return True
-            End If
-            Return False
-        End Function
-        Protected MustOverride ReadOnly Property Left As Func(Of Region)
-        Protected MustOverride ReadOnly Property Right As Func(Of Region)
-        Protected ReadOnly WriteEntities As New List(Of Entity)(GlobalEntities)
-        Public ReadOnly Entities As New ReadOnlyCollection(Of Entity)(WriteEntities)
-        Public Sub Dispose() Implements IDisposable.Dispose
-            For Each entity In Entities.Except(GlobalEntities)
-                entity.Dispose()
-            Next
-        End Sub
-    End Class
-    Public ReadOnly Property CurrentRegion As Region
-        Get
-            Return _currentRegion
-        End Get
-    End Property
-    Public WriteOnly Property SetCurrentRegion As Func(Of Region)
-        Set(value As Func(Of Region))
-            _currentRegion.Dispose()
-            ' **Prevent collision detection between old and new region entities**
-            _currentRegion = value()
-        End Set
-    End Property
-    Class Region1_Title
-        Inherits Region
-        Protected ReadOnly SBA As New TextEntity(WriteEntities, "SBA: Sunny's Big Adventure", New Point(10, 0), ConsoleColor.Yellow)
-        Protected ReadOnly Arrow1 As New TextEntity(WriteEntities, "▶", New Point(17, 1), ConsoleColor.DarkRed)
-        Protected ReadOnly Arrow2 As New TextEntity(WriteEntities, "▶", New Point(18, 1), ConsoleColor.Red)
-        Protected ReadOnly Arrow3 As New TextEntity(WriteEntities, "▶", New Point(19, 1), ConsoleColor.Yellow)
-        Protected ReadOnly Arrow4 As New TextEntity(WriteEntities, "▶", New Point(20, 1), ConsoleColor.Green)
-        Protected ReadOnly Arrow5 As New TextEntity(WriteEntities, "▶", New Point(21, 1), ConsoleColor.Cyan)
-        Protected ReadOnly Arrow6 As New TextEntity(WriteEntities, "▶", New Point(22, 1), ConsoleColor.Blue)
-        Protected ReadOnly Arrow7 As New TextEntity(WriteEntities, "▶", New Point(23, 1), ConsoleColor.Magenta)
-        Protected ReadOnly Keybinds As New TextEntity(WriteEntities, "Arrow keys: Move", New Point(10, 9))
-        Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 1, WindowWidth - 30, 8))
-        Protected Overrides ReadOnly Property Left As Func(Of Region) = Nothing
-        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region2_NumberGuess()
-    End Class
-    Class Region2_NumberGuess
-        Inherits Region
-        Protected Passcode As Byte = CByte(Random.Next(101))
-        Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct")
-        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~100)")
-        Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: I must guess it...")
-        Protected ReadOnly Instruction4 As New TextEntity(WriteEntities, "0 to 9: Input passcode")
-        Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
-        Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8), ConsoleColor.Cyan)
-        Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 6, 6, 3),
-                                                      Function(key)
-                                                          ActiveEntity.Sprite = Sunny_
-                                                          Select Case key
-                                                              Case ConsoleKey.D0 To ConsoleKey.D9
-                                                                  Input.Text &= key.ToString()(1)
-                                                              Case ConsoleKey.Backspace
-                                                                  If Input.Text <> "Input: " Then _
-                                                                      Input.Text = Input.Text.Substring(0, Input.Text.Length - 1)
-                                                              Case ConsoleKey.Enter
-                                                                  Dim inputNumber As Byte
-                                                                  If Byte.TryParse(String.Concat(Input.Text.SkipWhile(Function(c) Not Char.IsDigit(c))),
-                                                                                      inputNumber) Then
-                                                                      Select Case inputNumber
-                                                                          Case Is < Passcode
-                                                                              Instruction3.Text = "Sunny: The input is too small..."
-                                                                              ActiveEntity.Sprite = Sunny_Angry
-                                                                          Case Is > Passcode
-                                                                              Instruction3.Text = "Sunny: The input is too large..."
-                                                                              ActiveEntity.Sprite = Sunny_Angry
-                                                                          Case Else
-                                                                              Instruction3.Color = ConsoleColor.Green
-                                                                              Instruction3.Text = "Sunny: Yes! The passcode is correct!"
-                                                                              Instruction.Dispose()
-                                                                              Instruction2.Dispose()
-                                                                              Input.Dispose()
-                                                                              Barrier.Dispose()
-                                                                              Trigger.Dispose()
-                                                                      End Select
-                                                                  Else
-                                                                      Instruction3.Text = "Sunny: The input is too large..." ' inputNumber > 255
-                                                                  End If
-                                                                  Input.Text = "Input: "
-                                                          End Select
-                                                          Return True
-                                                      End Function,
-                                                      Sub()
-                                                          Instruction.Position = New Point(10, 0)
-                                                          Threading.Thread.Sleep(500)
-                                                          Instruction2.Position = New Point(10, 1)
-                                                          Threading.Thread.Sleep(500)
-                                                          Instruction3.Position = New Point(0, 2)
-                                                          Threading.Thread.Sleep(500)
-                                                          Input.Position = New Point(0, 3)
-                                                          Threading.Thread.Sleep(500)
-                                                          Instruction4.Position = New Point(10, 9)
-                                                      End Sub)
-        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region1_Title()
-        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region3_BullsAndCows()
-    End Class
-    Class Region3_BullsAndCows
-        Inherits Region
-        Protected Passcode As Short = CShort(Random.Next(10000))
-        Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct passcode")
-        Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "to continue! (4 digits: 0000~9999)")
-        Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: Oh no! This only allows 12 tries!")
-        Protected ReadOnly Instruction4 As New TextEntity(WriteEntities, "+: Correct Number & Position, -: Correct Number")
-        Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
-        Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8), ConsoleColor.Cyan)
-        Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 6, 6, 3),
+Dim _currentRegion As Region
+MustInherit Class Region
+    Implements IDisposable
+    Sub New(Optional bedrock As Boolean = True)
+        If bedrock Then Equals(New RectangleEntity(WriteEntities,
+                                   New Rectangle(0, WindowHeight - 2, WindowWidth, 1)), Nothing)
+    End Sub
+    ''' <returns>Whether region was changed.</returns>
+    Public Function GoLeft() As Boolean
+        If Left IsNot Nothing Then
+            SetCurrentRegion = Left
+            Return True
+        End If
+        Return False
+    End Function
+    ''' <returns>Whether region was changed.</returns>
+    Public Function GoRight() As Boolean
+        If Right IsNot Nothing Then
+            SetCurrentRegion = Right
+            SaveRegion(CurrentRegion)
+            Return True
+        End If
+        Return False
+    End Function
+    Protected MustOverride ReadOnly Property Left As Func(Of Region)
+    Protected MustOverride ReadOnly Property Right As Func(Of Region)
+    Protected ReadOnly WriteEntities As New List(Of Entity)(GlobalEntities)
+    Public ReadOnly Entities As New ReadOnlyCollection(Of Entity)(WriteEntities)
+    Public Sub Dispose() Implements IDisposable.Dispose
+        For Each entity In Entities.Except(GlobalEntities)
+            entity.Dispose()
+        Next
+    End Sub
+End Class
+Public ReadOnly Property CurrentRegion As Region
+    Get
+        Return _currentRegion
+    End Get
+End Property
+Public WriteOnly Property SetCurrentRegion As Func(Of Region)
+    Set(value As Func(Of Region))
+        _currentRegion.Dispose()
+        ' **Prevent collision detection between old and new region entities**
+        _currentRegion = value()
+    End Set
+End Property
+Class Region1_Title
+    Inherits Region
+    Protected ReadOnly SBA As New TextEntity(WriteEntities, "SBA: Sunny's Big Adventure", New Point(10, 0), ConsoleColor.Yellow)
+    Protected ReadOnly Arrow1 As New TextEntity(WriteEntities, "▶", New Point(17, 1), ConsoleColor.DarkRed)
+    Protected ReadOnly Arrow2 As New TextEntity(WriteEntities, "▶", New Point(18, 1), ConsoleColor.Red)
+    Protected ReadOnly Arrow3 As New TextEntity(WriteEntities, "▶", New Point(19, 1), ConsoleColor.Yellow)
+    Protected ReadOnly Arrow4 As New TextEntity(WriteEntities, "▶", New Point(20, 1), ConsoleColor.Green)
+    Protected ReadOnly Arrow5 As New TextEntity(WriteEntities, "▶", New Point(21, 1), ConsoleColor.Cyan)
+    Protected ReadOnly Arrow6 As New TextEntity(WriteEntities, "▶", New Point(22, 1), ConsoleColor.Blue)
+    Protected ReadOnly Arrow7 As New TextEntity(WriteEntities, "▶", New Point(23, 1), ConsoleColor.Magenta)
+    Protected ReadOnly Keybinds As New TextEntity(WriteEntities, "Arrow keys: Move", New Point(10, 9))
+    Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 1, WindowWidth - 30, 8))
+    Protected Overrides ReadOnly Property Left As Func(Of Region) = Nothing
+    Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region2_NumberGuess()
+End Class
+Class Region2_NumberGuess
+    Inherits Region
+    Protected Passcode As Byte = CByte(Random.Next(101))
+    Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct")
+    Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "passcode to continue! (0~100)")
+    Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: I must guess it...")
+    Protected ReadOnly Instruction4 As New TextEntity(WriteEntities, "0 to 9: Input passcode")
+    Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
+    Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8), ConsoleColor.Cyan)
+    Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 6, 6, 3),
         Function(key)
             ActiveEntity.Sprite = Sunny_
             Select Case key
                 Case ConsoleKey.D0 To ConsoleKey.D9
-                    If Input.Text.Length < "Input: 9999".Length Then Input.Text &= key.ToString()(1)
+                    Input.Text &= key.ToString()(1)
                 Case ConsoleKey.Backspace
                     If Input.Text <> "Input: " Then _
                         Input.Text = Input.Text.Substring(0, Input.Text.Length - 1)
                 Case ConsoleKey.Enter
-                    If Input.Text.Length = "Input: 9999".Length Then
-                        Dim inputNumber = Short.Parse(String.Concat(
-                                    Input.Text.SkipWhile(Function(c) Not Char.IsDigit(c))))
-                        Dim t = Matches(inputNumber, Passcode)
-                        Dim p = NextPosition()
-                        If t.CorrectNumPos = 4 Then
-                            Input.Color = ConsoleColor.Green
-                            Input.Text = "Gate open!"
-                            Barrier.Dispose()
-                            Trigger.Dispose()
-                        ElseIf p.HasValue Then
-                            Input.Text = "Input: "
-                            Dim e As New TextEntity(WriteEntities, String.Concat(inputNumber.ToString().PadLeft(4, "0"c),
-                                " ", New String("+"c, t.CorrectNumPos), New String("-"c, t.CorrectNum)), p)
-                            ActiveEntity.Sprite = Sunny_Angry
-                        Else
-                            Input.Color = ConsoleColor.Red
-                            Input.Text = "Gate locked."
-                            ActiveEntity.Sprite = Sunny_Angry
-                            Trigger.Dispose()
-                        End If
+                    Dim inputNumber As Byte
+                    If Byte.TryParse(String.Concat(Input.Text.SkipWhile(Function(c) Not Char.IsDigit(c))),
+                                        inputNumber) Then
+                        Select Case inputNumber
+                            Case Is < Passcode
+                                Instruction3.Text = "Sunny: The input is too small..."
+                                ActiveEntity.Sprite = Sunny_Angry
+                            Case Is > Passcode
+                                Instruction3.Text = "Sunny: The input is too large..."
+                                ActiveEntity.Sprite = Sunny_Angry
+                            Case Else
+                                Instruction3.Color = ConsoleColor.Green
+                                Instruction3.Text = "Sunny: Yes! The passcode is correct!"
+                                Instruction.Dispose()
+                                Instruction2.Dispose()
+                                Input.Dispose()
+                                Barrier.Dispose()
+                                Trigger.Dispose()
+                        End Select
                     Else
-                        Input.Text = "Input: "
+                        Instruction3.Text = "Sunny: The input is too large..." ' inputNumber > 255
                     End If
+                    Input.Text = "Input: "
             End Select
             Return True
         End Function,
         Sub()
-            ActiveEntity.Sprite = Sunny_
-            Instruction.Position = New Point(5, 0)
+            Instruction.Position = New Point(10, 0)
             Threading.Thread.Sleep(500)
-            Instruction2.Position = New Point(5, 1)
+            Instruction2.Position = New Point(10, 1)
             Threading.Thread.Sleep(500)
             Instruction3.Position = New Point(0, 2)
             Threading.Thread.Sleep(500)
             Input.Position = New Point(0, 3)
             Threading.Thread.Sleep(500)
-            Instruction4.Position = New Point(0, 9)
+            Instruction4.Position = New Point(10, 9)
         End Sub)
-        Public Shared Function Matches(guess As Short, actual As Short) As (CorrectNumPos As Integer, CorrectNum As Integer)
-            Dim g = guess.ToString().PadLeft(4, "0"c)
-            Dim a = actual.ToString().PadLeft(4, "0"c)
-            Dim correctNumPosCount = g.Zip(a, Function(gc, ac) gc = ac).Count(Function(b) b)
-            Dim correctNumCount = g.
-                GroupBy(Function(gc) gc).
-                OrderBy(Function(gc) gc.Key).
-                GroupJoin(a, Function(gc) gc.Key, Function(ac) ac, Function(gc, ac) Math.Min(ac.Count, gc.Count)).
-                Sum() - correctNumPosCount
-            Return (correctNumPosCount, correctNumCount)
-        End Function
-        Protected NextPositionStore As New Point(12, 2)
-        Function NextPosition() As Point?
-            Dim p As New Point(NextPositionStore.Left, NextPositionStore.Top + 1)
-            If p.Top = 7 Then _
-                If p.Left = 12 + 2 * 10 Then NextPosition = Nothing _
-                Else NextPosition = New Point(p.Left + 10, 3) Else NextPosition = p
-            If NextPosition.HasValue Then NextPositionStore = NextPosition.GetValueOrDefault()
-        End Function
-        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
-        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region4_ConnectFour()
-    End Class
-    Class Region4_ConnectFour
-        Inherits Region
-        Enum Player
-            None
-            Player
-            CPU
-        End Enum
-        Protected ReadOnly GameArea As New Rectangle(8, 1, 17, 8)
-        Protected ReadOnly Instructions As New TextEntity(WriteEntities, "Press 1~7 to add a piece. Connect 4 to win")
-        Protected ReadOnly Ruler As New TextEntity(WriteEntities, "11223344556677")
-        Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("○"c, ConsoleColor.Green))
-        Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("●"c, ConsoleColor.Red))
-        Protected ReadOnly GameField As New RectangleEntity(WriteEntities, GameArea, ConsoleColor.Blue)
-        Protected WaitingForCPU As Boolean = False
-        Protected ReadOnly Trigger As New TriggerZone(WriteEntities,
-            New Rectangle(GameArea.Left - 3, GameArea.Top - 1, GameArea.Width + 6, GameArea.Height + 1),
-            Function(key)
-                ActiveEntity.Sprite = Sunny_
-                If Not WaitingForCPU Then
-                    Select Case key
-                        Case ConsoleKey.D1 To ConsoleKey.D7
-                            Dim i = key - ConsoleKey.D0
-                            If Not Entities.Any(Function(e) If(e.Position = New Point(GameArea.Left + i * 2, GameArea.Top + 1), False)) Then
-                                Whites.Add(New Point(GameArea.Left + i * 2, GameArea.Top + 1), AddressOf OnCPUTick)
-                                WaitingForCPU = True
-                            End If
-                    End Select
-                End If
-                Return True
-            End Function,
-            Sub()
-                Instructions.Position = New Point(3, 0)
-                Ruler.Position = New Point(10, 9)
-                AddHandler Tick, AddressOf OnTick
-            End Sub, Sub() RemoveHandler Tick, AddressOf OnTick)
-        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region3_BullsAndCows()
-        Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region5_Win()
-        Protected Sub OnTick()
-            Select Case WhoWin(Nothing)
-                Case Player.Player
-                    Instructions.Color = ConsoleColor.Green
-                    Instructions.Text = "You win!"
-                    Instructions.Position = New Point(13, 0)
-                    ActiveEntity.Position = New Point(GameArea.Right + 4, GameArea.Bottom - 3)
-                    Trigger.Dispose()
-                Case Player.CPU
-                    Instructions.Color = ConsoleColor.Red
-                    Instructions.Text = "CPU wins!"
-                    Instructions.Position = New Point(13, 0)
-                    ActiveEntity.Sprite = Sunny_Angry
-                    Trigger.Dispose()
-            End Select
-        End Sub
-        Protected Function WhoWin(simulateCoordinatesOpt As (blackX As Integer?, whiteX As Integer?)) As Player
-            Dim Matches =
-                Function(side As GravityEntityFactory, point As Point, simulatePosition As Point?)
-                    Dim occupier As GravityEntityFactory.GravityEntityFactoryEntity = Nothing
-                    For Each item In Entities.OfType(Of GravityEntityFactory.GravityEntityFactoryEntity)
-                        If item.Position = New Point(GameArea.Left + point.Left * 2, GameArea.Top - 1 + point.Top) Then
-                            occupier = item
-                            Exit For
+    Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region1_Title()
+    Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region3_BullsAndCows()
+End Class
+Class Region3_BullsAndCows
+    Inherits Region
+    Protected Passcode As Short = CShort(Random.Next(10000))
+    Protected ReadOnly Instruction As New TextEntity(WriteEntities, "You must input the correct passcode")
+    Protected ReadOnly Instruction2 As New TextEntity(WriteEntities, "to continue! (4 digits: 0000~9999)")
+    Protected ReadOnly Instruction3 As New TextEntity(WriteEntities, "Sunny: Oh no! This only allows 12 tries!")
+    Protected ReadOnly Instruction4 As New TextEntity(WriteEntities, "+: Correct Number & Position, -: Correct Number")
+    Protected ReadOnly Input As New TextEntity(WriteEntities, "Input: ")
+    Protected ReadOnly Barrier As New RectangleEntity(WriteEntities, New Rectangle(42, 0, 2, 8), ConsoleColor.Cyan)
+    Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(30, 6, 6, 3),
+		Function(key)
+			ActiveEntity.Sprite = Sunny_
+			Select Case key
+				Case ConsoleKey.D0 To ConsoleKey.D9
+					If Input.Text.Length < "Input: 9999".Length Then Input.Text &= key.ToString()(1)
+				Case ConsoleKey.Backspace
+					If Input.Text <> "Input: " Then _
+						Input.Text = Input.Text.Substring(0, Input.Text.Length - 1)
+				Case ConsoleKey.Enter
+					If Input.Text.Length = "Input: 9999".Length Then
+						Dim inputNumber = Short.Parse(String.Concat(
+									Input.Text.SkipWhile(Function(c) Not Char.IsDigit(c))))
+						Dim t = Matches(inputNumber, Passcode)
+						Dim p = NextPosition()
+						If t.CorrectNumPos = 4 Then
+							Input.Color = ConsoleColor.Green
+							Input.Text = "Gate open!"
+							Barrier.Dispose()
+							Trigger.Dispose()
+						ElseIf p.HasValue Then
+							Input.Text = "Input: "
+							Dim e As New TextEntity(WriteEntities, String.Concat(inputNumber.ToString().PadLeft(4, "0"c),
+								" ", New String("+"c, t.CorrectNumPos), New String("-"c, t.CorrectNum)), p)
+							ActiveEntity.Sprite = Sunny_Angry
+						Else
+							Input.Color = ConsoleColor.Red
+							Input.Text = "Gate locked."
+							ActiveEntity.Sprite = Sunny_Angry
+							Trigger.Dispose()
+						End If
+					Else
+						Input.Text = "Input: "
+					End If
+			End Select
+			Return True
+		End Function,
+    Sub()
+        ActiveEntity.Sprite = Sunny_
+        Instruction.Position = New Point(5, 0)
+        Threading.Thread.Sleep(500)
+        Instruction2.Position = New Point(5, 1)
+        Threading.Thread.Sleep(500)
+        Instruction3.Position = New Point(0, 2)
+        Threading.Thread.Sleep(500)
+        Input.Position = New Point(0, 3)
+        Threading.Thread.Sleep(500)
+        Instruction4.Position = New Point(0, 9)
+    End Sub)
+    Public Shared Function Matches(guess As Short, actual As Short) As (CorrectNumPos As Integer, CorrectNum As Integer)
+        Dim g = guess.ToString().PadLeft(4, "0"c)
+        Dim a = actual.ToString().PadLeft(4, "0"c)
+        Dim correctNumPosCount = g.Zip(a, Function(gc, ac) gc = ac).Count(Function(b) b)
+        Dim correctNumCount = g.
+            GroupBy(Function(gc) gc).
+            OrderBy(Function(gc) gc.Key).
+            GroupJoin(a, Function(gc) gc.Key, Function(ac) ac, Function(gc, ac) Math.Min(ac.Count, gc.Count)).
+            Sum() - correctNumPosCount
+        Return (correctNumPosCount, correctNumCount)
+    End Function
+    Protected NextPositionStore As New Point(12, 2)
+    Function NextPosition() As Point?
+        Dim p As New Point(NextPositionStore.Left, NextPositionStore.Top + 1)
+        If p.Top = 7 Then _
+            If p.Left = 12 + 2 * 10 Then NextPosition = Nothing _
+            Else NextPosition = New Point(p.Left + 10, 3) Else NextPosition = p
+        If NextPosition.HasValue Then NextPositionStore = NextPosition.GetValueOrDefault()
+    End Function
+    Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region2_NumberGuess()
+    Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region4_ConnectFour()
+End Class
+Class Region4_ConnectFour
+    Inherits Region
+    Enum Player
+        None
+        Player
+        CPU
+    End Enum
+    Protected ReadOnly GameArea As New Rectangle(8, 1, 17, 8)
+    Protected ReadOnly Instructions As New TextEntity(WriteEntities, "Press 1~7 to add a piece. Connect 4 to win")
+    Protected ReadOnly Ruler As New TextEntity(WriteEntities, "11223344556677")
+    Protected ReadOnly Whites As New GravityEntityFactory(WriteEntities, New Sprite("○"c, ConsoleColor.Green))
+    Protected ReadOnly Blacks As New GravityEntityFactory(WriteEntities, New Sprite("●"c, ConsoleColor.Red))
+    Protected ReadOnly GameField As New RectangleEntity(WriteEntities, GameArea, ConsoleColor.Blue)
+    Protected WaitingForCPU As Boolean = False
+    Protected ReadOnly Trigger As New TriggerZone(WriteEntities,
+        New Rectangle(GameArea.Left - 3, GameArea.Top - 1, GameArea.Width + 6, GameArea.Height + 1),
+        Function(key)
+            ActiveEntity.Sprite = Sunny_
+            If Not WaitingForCPU Then
+                Select Case key
+                    Case ConsoleKey.D1 To ConsoleKey.D7
+                        Dim i = key - ConsoleKey.D0
+                        If Not Entities.Any(Function(e) If(e.Position = New Point(GameArea.Left + i * 2, GameArea.Top + 1), False)) Then
+                            Whites.Add(New Point(GameArea.Left + i * 2, GameArea.Top + 1), AddressOf OnCPUTick)
+                            WaitingForCPU = True
                         End If
-                    Next
-                    Return If(occupier IsNot Nothing,
-                        occupier.Owner Is side AndAlso occupier.VerticalVelocity = 0,
-                        point = simulatePosition)
-                End Function
-            Dim black = IfHasValue(simulateCoordinatesOpt.blackX,
-                Function(blackX)
-                    For y = 1 To 7
-                        If Matches(Whites, New Point(blackX, y), Nothing) OrElse
-                           Matches(Blacks, New Point(blackX, y), Nothing) Then
-                            Return New Point(blackX, If(y = 1, 1, y - 1))
-                        End If
-                    Next
-                    Return New Point(blackX, 7)
-                End Function)
-            Dim white = IfHasValue(simulateCoordinatesOpt.whiteX,
-                        Function(whiteX)
-                            For y = 1 To 7
-                                If Matches(Whites, New Point(whiteX, y), Nothing) OrElse
-                                   Matches(Blacks, New Point(whiteX, y), Nothing) OrElse
-                                   black = New Point(whiteX, y) Then _
-                                   Return New Point(whiteX, If(y = 1, 1, y - 1))
-                            Next
-                            Return New Point(whiteX, 7)
-                        End Function)
-            Dim connected = Function(p1 As Point, p2 As Point, p3 As Point, p4 As Point)
-                                If Matches(Whites, p1, white) AndAlso
-                                   Matches(Whites, p2, white) AndAlso
-                                   Matches(Whites, p3, white) AndAlso
-                                   Matches(Whites, p4, white) Then Return Player.Player
-                                If Matches(Blacks, p1, black) AndAlso
-                                   Matches(Blacks, p2, black) AndAlso
-                                   Matches(Blacks, p3, black) AndAlso
-                                   Matches(Blacks, p4, black) Then Return Player.CPU
-                                Return Player.None
-                            End Function
-            ' -
-            For y = 1 To 7
-                For x = 1 To 4
-                    WhoWin = connected(New Point(x, y), New Point(x + 1, y), New Point(x + 2, y), New Point(x + 3, y))
-                    If WhoWin <> Player.None Then Return WhoWin
-                Next
-            Next
-            ' |
-            For y = 1 To 4
-                For x = 1 To 7
-                    WhoWin = connected(New Point(x, y), New Point(x, y + 1), New Point(x, y + 2), New Point(x, y + 3))
-                    If WhoWin <> Player.None Then Return WhoWin
-                Next
-            Next
-            ' \
-            For x = 1 To 4
-                For y = 1 To 4
-                    WhoWin = connected(New Point(x, y), New Point(x + 1, y + 1), New Point(x + 2, y + 2), New Point(x + 3, y + 3))
-                    If WhoWin <> Player.None Then Return WhoWin
-                Next
-            Next
-            ' /
-            For x = 1 To 4
-                For y = 4 To 7
-                    WhoWin = connected(New Point(x, y), New Point(x + 1, y - 1), New Point(x + 2, y - 2), New Point(x + 3, y - 3))
-                    If WhoWin <> Player.None Then Return WhoWin
-                Next
-            Next
-            Return Player.None
-        End Function
-        Sub OnCPUTick()
-            Dim cpu = CPUTurn()
-            If cpu IsNot Nothing Then
-                Blacks.Add(New Point(GameArea.Left + cpu.GetValueOrDefault() * 2, GameArea.Top + 1))
-            Else
-                Instructions.Text = "Stalemate. Press Enter to restart."
-                Instructions.Position = New Point(3, 0)
+                End Select
             End If
-            RemoveHandler Tick, AddressOf OnCPUTick
-            WaitingForCPU = False
-        End Sub
-        Function CPUTurn() As Integer?
-            Dim choices = Enumerable.Range(1, 7).Where(Function(x) _
-                   If(Not (Whites.ItemAt(New Point(GameArea.Left + x * 2, GameArea.Top + 1))?.VerticalVelocity = 0 OrElse
-                           Blacks.ItemAt(New Point(GameArea.Left + x * 2, GameArea.Top + 1))?.VerticalVelocity = 0), True)).ToHashSet()
-            Dim avoidChoices = New HashSet(Of Integer)()
-            ' 1. Black win
-            For Each x In choices
-                If WhoWin((x, Nothing)) = Player.CPU Then Return x
-            Next
-            ' 2. Block white win
-            For Each x In choices
-                If WhoWin((Nothing, x)) = Player.Player Then Return x
-            Next
-            ' 3. Avoid white win
-            For Each x In choices
-                For Each x2 In choices
-                    If WhoWin((x, x2)) = Player.Player Then avoidChoices.Add(x)
+            Return True
+        End Function,
+        Sub()
+            Instructions.Position = New Point(3, 0)
+            Ruler.Position = New Point(10, 9)
+            AddHandler Tick, AddressOf OnTick
+        End Sub, Sub() RemoveHandler Tick, AddressOf OnTick)
+    Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region3_BullsAndCows()
+    Protected Overrides ReadOnly Property Right As Func(Of Region) = Function() New Region5_Win()
+    Protected Sub OnTick()
+        Select Case WhoWin(Nothing)
+            Case Player.Player
+                Instructions.Color = ConsoleColor.Green
+                Instructions.Text = "You win!"
+                Instructions.Position = New Point(13, 0)
+                ActiveEntity.Position = New Point(GameArea.Right + 4, GameArea.Bottom - 3)
+                Trigger.Dispose()
+            Case Player.CPU
+                Instructions.Color = ConsoleColor.Red
+                Instructions.Text = "CPU wins!"
+                Instructions.Position = New Point(13, 0)
+                ActiveEntity.Sprite = Sunny_Angry
+                Trigger.Dispose()
+        End Select
+    End Sub
+    Protected Function WhoWin(simulateCoordinatesOpt As (blackX As Integer?, whiteX As Integer?)) As Player
+        Dim Matches =
+            Function(side As GravityEntityFactory, point As Point, simulatePosition As Point?)
+                Dim occupier As GravityEntityFactory.GravityEntityFactoryEntity = Nothing
+                For Each item In Entities.OfType(Of GravityEntityFactory.GravityEntityFactoryEntity)
+                    If item.Position = New Point(GameArea.Left + point.Left * 2, GameArea.Top - 1 + point.Top) Then
+                        occupier = item
+                        Exit For
+                    End If
                 Next
+                Return If(occupier IsNot Nothing,
+                    occupier.Owner Is side AndAlso occupier.VerticalVelocity = 0,
+                    point = simulatePosition)
+            End Function
+        Dim black = IfHasValue(simulateCoordinatesOpt.blackX,
+            Function(blackX)
+                For y = 1 To 7
+                    If Matches(Whites, New Point(blackX, y), Nothing) OrElse
+                       Matches(Blacks, New Point(blackX, y), Nothing) Then
+                        Return New Point(blackX, If(y = 1, 1, y - 1))
+                    End If
+                Next
+                Return New Point(blackX, 7)
+            End Function)
+        Dim white = IfHasValue(simulateCoordinatesOpt.whiteX,
+                    Function(whiteX)
+                        For y = 1 To 7
+                            If Matches(Whites, New Point(whiteX, y), Nothing) OrElse
+                               Matches(Blacks, New Point(whiteX, y), Nothing) OrElse
+                               black = New Point(whiteX, y) Then _
+                               Return New Point(whiteX, If(y = 1, 1, y - 1))
+                        Next
+                        Return New Point(whiteX, 7)
+                    End Function)
+        Dim connected = Function(p1 As Point, p2 As Point, p3 As Point, p4 As Point)
+                            If Matches(Whites, p1, white) AndAlso
+                               Matches(Whites, p2, white) AndAlso
+                               Matches(Whites, p3, white) AndAlso
+                               Matches(Whites, p4, white) Then Return Player.Player
+                            If Matches(Blacks, p1, black) AndAlso
+                               Matches(Blacks, p2, black) AndAlso
+                               Matches(Blacks, p3, black) AndAlso
+                               Matches(Blacks, p4, black) Then Return Player.CPU
+                            Return Player.None
+                        End Function
+        ' -
+        For y = 1 To 7
+            For x = 1 To 4
+                WhoWin = connected(New Point(x, y), New Point(x + 1, y), New Point(x + 2, y), New Point(x + 3, y))
+                If WhoWin <> Player.None Then Return WhoWin
             Next
-            ' 4. Random placement
-            choices.ExceptWith(avoidChoices)
-            Return If(choices.Count > 0, choices.RandomItem(),
-                   If(avoidChoices.Count > 0, avoidChoices.RandomItem(), New Integer?()))
-        End Function
-    End Class
-    Class Region5_Win
-        Inherits Region
-        Protected ReadOnly Win As New TextEntity(WriteEntities, "You win!! Press Enter to start again.", New Point(6, 0))
-        Protected ReadOnly Fireworks As Sprite() = {Firework_1, Firework_2, Firework_3}
-        Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(0, 0, WindowWidth, WindowHeight),
-            Function(key)
-                If key = ConsoleKey.Enter Then
-                    SetCurrentRegion = Function() New Region1_Title()
-                    SaveRegion(CurrentRegion)
-                End If
-                Return False
-            End Function,
-            Sub() If Not TickEvent.GetInvocationList().Where(Function(x) x.Target Is Me).Any() Then AddHandler Tick, AddressOf OnTick,
-            Sub() RemoveHandler Tick, AddressOf OnTick)
-        Protected Sub OnTick()
-            WriteEntities.Add(New IteratingSpriteEntity(WriteEntities, Fireworks, New Point(Random.Next(WindowWidth), Random.Next(1, 7))))
-        End Sub
-        Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region4_ConnectFour()
-        Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
-    End Class
+        Next
+        ' |
+        For y = 1 To 4
+            For x = 1 To 7
+                WhoWin = connected(New Point(x, y), New Point(x, y + 1), New Point(x, y + 2), New Point(x, y + 3))
+                If WhoWin <> Player.None Then Return WhoWin
+            Next
+        Next
+        ' \
+        For x = 1 To 4
+            For y = 1 To 4
+                WhoWin = connected(New Point(x, y), New Point(x + 1, y + 1), New Point(x + 2, y + 2), New Point(x + 3, y + 3))
+                If WhoWin <> Player.None Then Return WhoWin
+            Next
+        Next
+        ' /
+        For x = 1 To 4
+            For y = 4 To 7
+                WhoWin = connected(New Point(x, y), New Point(x + 1, y - 1), New Point(x + 2, y - 2), New Point(x + 3, y - 3))
+                If WhoWin <> Player.None Then Return WhoWin
+            Next
+        Next
+        Return Player.None
+    End Function
+    Sub OnCPUTick()
+        Dim cpu = CPUTurn()
+        If cpu IsNot Nothing Then
+            Blacks.Add(New Point(GameArea.Left + cpu.GetValueOrDefault() * 2, GameArea.Top + 1))
+        Else
+            Instructions.Text = "Stalemate. Press Enter to restart."
+            Instructions.Position = New Point(3, 0)
+        End If
+        RemoveHandler Tick, AddressOf OnCPUTick
+        WaitingForCPU = False
+    End Sub
+    Function CPUTurn() As Integer?
+        Dim choices = Enumerable.Range(1, 7).Where(Function(x) _
+               If(Not (Whites.ItemAt(New Point(GameArea.Left + x * 2, GameArea.Top + 1))?.VerticalVelocity = 0 OrElse
+                       Blacks.ItemAt(New Point(GameArea.Left + x * 2, GameArea.Top + 1))?.VerticalVelocity = 0), True)).ToHashSet()
+        Dim avoidChoices = New HashSet(Of Integer)()
+        ' 1. Black win
+        For Each x In choices
+            If WhoWin((x, Nothing)) = Player.CPU Then Return x
+        Next
+        ' 2. Block white win
+        For Each x In choices
+            If WhoWin((Nothing, x)) = Player.Player Then Return x
+        Next
+        ' 3. Avoid white win
+        For Each x In choices
+            For Each x2 In choices
+                If WhoWin((x, x2)) = Player.Player Then avoidChoices.Add(x)
+            Next
+        Next
+        ' 4. Random placement
+        choices.ExceptWith(avoidChoices)
+        Return If(choices.Count > 0, choices.RandomItem(),
+               If(avoidChoices.Count > 0, avoidChoices.RandomItem(), New Integer?()))
+    End Function
+End Class
+Class Region5_Win
+    Inherits Region
+    Protected ReadOnly Win As New TextEntity(WriteEntities, "You win!! Press Enter to start again.", New Point(6, 0))
+    Protected ReadOnly Fireworks As Sprite() = {Firework_1, Firework_2, Firework_3}
+    Protected ReadOnly Trigger As New TriggerZone(WriteEntities, New Rectangle(0, 0, WindowWidth, WindowHeight),
+        Function(key)
+            If key = ConsoleKey.Enter Then
+                SetCurrentRegion = Function() New Region1_Title()
+                SaveRegion(CurrentRegion)
+            End If
+            Return False
+        End Function,
+        Sub() If Not TickEvent.GetInvocationList().Where(Function(x) x.Target Is Me).Any() Then AddHandler Tick, AddressOf OnTick,
+        Sub() RemoveHandler Tick, AddressOf OnTick)
+    Protected Sub OnTick()
+        WriteEntities.Add(New IteratingSpriteEntity(WriteEntities, Fireworks, New Point(Random.Next(WindowWidth), Random.Next(1, 7))))
+    End Sub
+    Protected Overrides ReadOnly Property Left As Func(Of Region) = Function() New Region4_ConnectFour()
+    Protected Overrides ReadOnly Property Right As Func(Of Region) = Nothing
+End Class
 #End Region
     Const WindowWidth = 48
     Const WindowHeight = 10
